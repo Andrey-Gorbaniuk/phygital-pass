@@ -1,3 +1,5 @@
+import { SQUAT_PROTOCOL } from './protocol'
+
 export const TARGET_REPETITIONS = 10
 
 export type SquatPhase = 'idle' | 'standing' | 'descending' | 'bottom' | 'ascending' | 'paused'
@@ -30,13 +32,13 @@ export type SquatSnapshot = {
   lastRejected?: RejectedRep
 }
 
-const STANDING_ANGLE = 160
-const DESCENDING_ANGLE = 150
-const BOTTOM_ANGLE = 105
-const ASCENDING_ANGLE = 120
-const BOTTOM_HOLD_MS = 150
-const MIN_REP_DURATION_MS = 700
-const REP_COOLDOWN_MS = 550
+const STANDING_ANGLE = SQUAT_PROTOCOL.standingAngle
+const DESCENDING_ANGLE = SQUAT_PROTOCOL.descendingAngle
+const BOTTOM_ANGLE = SQUAT_PROTOCOL.bottomAngle
+const ASCENDING_ANGLE = SQUAT_PROTOCOL.ascendingAngle
+const BOTTOM_HOLD_MS = SQUAT_PROTOCOL.bottomHoldMs
+const MIN_REP_DURATION_MS = SQUAT_PROTOCOL.minRepDurationMs
+const REP_COOLDOWN_MS = SQUAT_PROTOCOL.repCooldownMs
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 

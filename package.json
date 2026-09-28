@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy:vps": "docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",
@@ -29,7 +29,6 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.3.6",
-    "vitest": "^3.2.7",
-    "wrangler": "^4.70.0"
+    "vitest": "^3.2.7"
   }
 }
