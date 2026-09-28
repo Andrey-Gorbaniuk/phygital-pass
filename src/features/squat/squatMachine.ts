@@ -1,0 +1,171 @@
+export const TARGET_REPETITIONS = 10
+
+export type SquatPhase = 'idle' | 'standing' | 'descending' | 'bottom' | 'ascending' | 'paused'
+
+export type SquatObservation = {
+  timestamp: number
+  isVisible: boolean
+  kneeAngle?: number
+}
+
+export type CompletedRep = {
+  durationMs: number
+  minKneeAngle: number
+  qualityScore: number
+}
+
+export type SquatSnapshot = {
+  phase: SquatPhase
+  repetitions: number
+  feedback: string
+  lastRep?: CompletedRep
+}
+
+const STANDING_ANGLE = 160
+const DESCENDING_ANGLE = 150
+const BOTTOM_ANGLE = 105
+const ASCENDING_ANGLE = 120
+const BOTTOM_HOLD_MS = 150
+const REP_COOLDOWN_MS = 550
+
+const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+
+function feedbackFor(phase: SquatPhase): string {
+  switch (phase) {
+    case 'standing':
+      return 'Готово. Начинайте приседание'
+    case 'descending':
+      return 'Опускайтесь ниже'
+    case 'bottom':
+      return 'Отлично. Возвращайтесь вверх'
+    case 'ascending':
+      return 'Вернитесь в исходное положение'
+    case 'paused':
+      return 'Трекинг на паузе — вернитесь в кадр'
+    default:
+      return 'Встаньте в полный рост'
+  }
+}
+
+function qualityFor(minKneeAngle: number, durationMs: number): number {
+  const depth = clamp(((125 - minKneeAngle) / 30) * 100, 0, 100)
+  const rhythm = clamp(100 - Math.abs(durationMs - 1600) / 14, 0, 100)
+  return Math.round(depth * 0.65 + rhythm * 0.35)
+}
+
+export class SquatMachine {
+  private phase: SquatPhase = 'idle'
+  private repetitions = 0
+  private bottomAt?: number
+  private repStartedAt?: number
+  private minKneeAngle?: number
+  private lastRepAt?: number
+
+  reset(): void {
+    this.phase = 'idle'
+    this.repetitions = 0
+    this.bottomAt = undefined
+    this.repStartedAt = undefined
+    this.minKneeAngle = undefined
+    this.lastRepAt = undefined
+  }
+
+  process(observation: SquatObservation): SquatSnapshot {
+    const { timestamp, isVisible, kneeAngle } = observation
+
+    if (!isVisible || kneeAngle === undefined) {
+      this.phase = 'paused'
+      this.clearCurrentRep()
+      return this.snapshot()
+    }
+
+    if (this.phase === 'paused' || this.phase === 'idle') {
+      this.phase = kneeAngle >= STANDING_ANGLE ? 'standing' : 'idle'
+      return this.snapshot()
+    }
+
+    if (this.phase === 'standing' && kneeAngle < DESCENDING_ANGLE) {
+      this.phase = 'descending'
+      this.repStartedAt = timestamp
+      this.minKneeAngle = kneeAngle
+      return this.snapshot()
+    }
+
+    if (this.phase === 'descending') {
+      this.captureMinAngle(kneeAngle)
+      if (kneeAngle <= BOTTOM_ANGLE) {
+        this.phase = 'bottom'
+        this.bottomAt = timestamp
+      } else if (kneeAngle >= STANDING_ANGLE) {
+        this.phase = 'standing'
+        this.clearCurrentRep()
+      }
+      return this.snapshot()
+    }
+
+    if (this.phase === 'bottom') {
+      this.captureMinAngle(kneeAngle)
+      if (kneeAngle >= ASCENDING_ANGLE && timestamp - (this.bottomAt ?? timestamp) >= BOTTOM_HOLD_MS) {
+        this.phase = 'ascending'
+      }
+      return this.snapshot()
+    }
+
+    if (this.phase === 'ascending') {
+      this.captureMinAngle(kneeAngle)
+      if (kneeAngle <= BOTTOM_ANGLE) {
+        this.phase = 'bottom'
+        this.bottomAt = timestamp
+        return this.snapshot()
+      }
+
+      if (kneeAngle >= STANDING_ANGLE) {
+        const lastRep = this.completeRep(timestamp)
+        this.phase = 'standing'
+        this.clearCurrentRep()
+        return this.snapshot(lastRep)
+      }
+    }
+
+    return this.snapshot()
+  }
+
+  private completeRep(timestamp: number): CompletedRep | undefined {
+    if (
+      this.repStartedAt === undefined ||
+      this.minKneeAngle === undefined ||
+      (this.lastRepAt !== undefined && timestamp - this.lastRepAt < REP_COOLDOWN_MS)
+    ) {
+      return undefined
+    }
+
+    const durationMs = timestamp - this.repStartedAt
+    const completed: CompletedRep = {
+      durationMs,
+      minKneeAngle: this.minKneeAngle,
+      qualityScore: qualityFor(this.minKneeAngle, durationMs),
+    }
+    this.repetitions += 1
+    this.lastRepAt = timestamp
+    return completed
+  }
+
+  private captureMinAngle(kneeAngle: number): void {
+    this.minKneeAngle = Math.min(this.minKneeAngle ?? kneeAngle, kneeAngle)
+  }
+
+  private clearCurrentRep(): void {
+    this.bottomAt = undefined
+    this.repStartedAt = undefined
+    this.minKneeAngle = undefined
+  }
+
+  private snapshot(lastRep?: CompletedRep): SquatSnapshot {
+    return {
+      phase: this.phase,
+      repetitions: this.repetitions,
+      feedback: feedbackFor(this.phase),
+      lastRep,
+    }
+  }
+}
