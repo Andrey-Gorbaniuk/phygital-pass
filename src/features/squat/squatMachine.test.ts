@@ -33,6 +33,36 @@ describe('SquatMachine', () => {
     const result = machine.process(visible(800, 170))
 
     expect(result.repetitions).toBe(0)
+    expect(result.rejectedAttempts).toBe(1)
+    expect(result.lastRejected?.reason).toBe('shallow')
+  })
+
+  it('rejects a movement that reaches depth but is completed too quickly', () => {
+    const machine = new SquatMachine()
+
+    machine.process(visible(0, 170))
+    machine.process(visible(20, 145))
+    machine.process(visible(100, 100))
+    machine.process(visible(280, 125))
+    const result = machine.process(visible(500, 170))
+
+    expect(result.repetitions).toBe(0)
+    expect(result.rejectedAttempts).toBe(1)
+    expect(result.lastRejected?.reason).toBe('too_fast')
+  })
+
+  it('rejects a bottom position that was not held long enough', () => {
+    const machine = new SquatMachine()
+
+    machine.process(visible(0, 170))
+    machine.process(visible(200, 145))
+    machine.process(visible(400, 100))
+    machine.process(visible(500, 130))
+    const result = machine.process(visible(800, 170))
+
+    expect(result.repetitions).toBe(0)
+    expect(result.rejectedAttempts).toBe(1)
+    expect(result.lastRejected?.reason).toBe('shallow')
   })
 
   it('pauses a sequence when pose visibility is lost without resetting previous progress', () => {
@@ -44,6 +74,8 @@ describe('SquatMachine', () => {
 
     expect(paused.phase).toBe('paused')
     expect(paused.repetitions).toBe(1)
+    expect(paused.rejectedAttempts).toBe(1)
+    expect(paused.lastRejected?.reason).toBe('tracking')
     expect(recovered.repetitions).toBe(1)
   })
 })

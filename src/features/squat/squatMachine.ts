@@ -14,11 +14,20 @@ export type CompletedRep = {
   qualityScore: number
 }
 
+export type RejectionReason = 'shallow' | 'tracking' | 'too_fast'
+
+export type RejectedRep = {
+  reason: RejectionReason
+  minKneeAngle?: number
+}
+
 export type SquatSnapshot = {
   phase: SquatPhase
   repetitions: number
+  rejectedAttempts: number
   feedback: string
   lastRep?: CompletedRep
+  lastRejected?: RejectedRep
 }
 
 const STANDING_ANGLE = 160
@@ -26,6 +35,7 @@ const DESCENDING_ANGLE = 150
 const BOTTOM_ANGLE = 105
 const ASCENDING_ANGLE = 120
 const BOTTOM_HOLD_MS = 150
+const MIN_REP_DURATION_MS = 700
 const REP_COOLDOWN_MS = 550
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
@@ -53,9 +63,16 @@ function qualityFor(minKneeAngle: number, durationMs: number): number {
   return Math.round(depth * 0.65 + rhythm * 0.35)
 }
 
+function rejectionFeedback(reason: RejectionReason): string {
+  if (reason === 'shallow') return 'Повтор не засчитан — опуститесь ниже и задержитесь внизу'
+  if (reason === 'too_fast') return 'Повтор не засчитан — выполните движение спокойнее'
+  return 'Повтор не засчитан — трекинг был потерян'
+}
+
 export class SquatMachine {
   private phase: SquatPhase = 'idle'
   private repetitions = 0
+  private rejectedAttempts = 0
   private bottomAt?: number
   private repStartedAt?: number
   private minKneeAngle?: number
@@ -64,6 +81,7 @@ export class SquatMachine {
   reset(): void {
     this.phase = 'idle'
     this.repetitions = 0
+    this.rejectedAttempts = 0
     this.bottomAt = undefined
     this.repStartedAt = undefined
     this.minKneeAngle = undefined
@@ -74,9 +92,9 @@ export class SquatMachine {
     const { timestamp, isVisible, kneeAngle } = observation
 
     if (!isVisible || kneeAngle === undefined) {
+      const lastRejected = this.rejectCurrentRep('tracking')
       this.phase = 'paused'
-      this.clearCurrentRep()
-      return this.snapshot()
+      return this.snapshot(undefined, lastRejected)
     }
 
     if (this.phase === 'paused' || this.phase === 'idle') {
@@ -98,14 +116,29 @@ export class SquatMachine {
         this.bottomAt = timestamp
       } else if (kneeAngle >= STANDING_ANGLE) {
         this.phase = 'standing'
-        this.clearCurrentRep()
+        const lastRejected = this.rejectCurrentRep('shallow')
+        return this.snapshot(undefined, lastRejected)
       }
       return this.snapshot()
     }
 
     if (this.phase === 'bottom') {
       this.captureMinAngle(kneeAngle)
-      if (kneeAngle >= ASCENDING_ANGLE && timestamp - (this.bottomAt ?? timestamp) >= BOTTOM_HOLD_MS) {
+      const bottomHeldLongEnough = timestamp - (this.bottomAt ?? timestamp) >= BOTTOM_HOLD_MS
+
+      if (kneeAngle >= STANDING_ANGLE && !bottomHeldLongEnough) {
+        this.phase = 'standing'
+        const lastRejected = this.rejectCurrentRep('shallow')
+        return this.snapshot(undefined, lastRejected)
+      }
+
+      if (kneeAngle > BOTTOM_ANGLE && !bottomHeldLongEnough) {
+        this.phase = 'descending'
+        this.bottomAt = undefined
+        return this.snapshot()
+      }
+
+      if (kneeAngle >= ASCENDING_ANGLE && bottomHeldLongEnough) {
         this.phase = 'ascending'
       }
       return this.snapshot()
@@ -120,26 +153,24 @@ export class SquatMachine {
       }
 
       if (kneeAngle >= STANDING_ANGLE) {
-        const lastRep = this.completeRep(timestamp)
+        const { lastRep, lastRejected } = this.completeRep(timestamp)
         this.phase = 'standing'
         this.clearCurrentRep()
-        return this.snapshot(lastRep)
+        return this.snapshot(lastRep, lastRejected)
       }
     }
 
     return this.snapshot()
   }
 
-  private completeRep(timestamp: number): CompletedRep | undefined {
-    if (
-      this.repStartedAt === undefined ||
-      this.minKneeAngle === undefined ||
-      (this.lastRepAt !== undefined && timestamp - this.lastRepAt < REP_COOLDOWN_MS)
-    ) {
-      return undefined
-    }
+  private completeRep(timestamp: number): { lastRep?: CompletedRep; lastRejected?: RejectedRep } {
+    if (this.repStartedAt === undefined || this.minKneeAngle === undefined) return {}
 
     const durationMs = timestamp - this.repStartedAt
+    if (durationMs < MIN_REP_DURATION_MS || (this.lastRepAt !== undefined && timestamp - this.lastRepAt < REP_COOLDOWN_MS)) {
+      return { lastRejected: this.rejectCurrentRep('too_fast') }
+    }
+
     const completed: CompletedRep = {
       durationMs,
       minKneeAngle: this.minKneeAngle,
@@ -147,11 +178,20 @@ export class SquatMachine {
     }
     this.repetitions += 1
     this.lastRepAt = timestamp
-    return completed
+    return { lastRep: completed }
   }
 
   private captureMinAngle(kneeAngle: number): void {
     this.minKneeAngle = Math.min(this.minKneeAngle ?? kneeAngle, kneeAngle)
+  }
+
+  private rejectCurrentRep(reason: RejectionReason): RejectedRep | undefined {
+    if (this.repStartedAt === undefined) return undefined
+
+    const rejected: RejectedRep = { reason, minKneeAngle: this.minKneeAngle }
+    this.rejectedAttempts += 1
+    this.clearCurrentRep()
+    return rejected
   }
 
   private clearCurrentRep(): void {
@@ -160,12 +200,14 @@ export class SquatMachine {
     this.minKneeAngle = undefined
   }
 
-  private snapshot(lastRep?: CompletedRep): SquatSnapshot {
+  private snapshot(lastRep?: CompletedRep, lastRejected?: RejectedRep): SquatSnapshot {
     return {
       phase: this.phase,
       repetitions: this.repetitions,
-      feedback: feedbackFor(this.phase),
+      rejectedAttempts: this.rejectedAttempts,
+      feedback: lastRejected ? rejectionFeedback(lastRejected.reason) : feedbackFor(this.phase),
       lastRep,
+      lastRejected,
     }
   }
 }

@@ -4,6 +4,7 @@ import { assessPose } from './features/pose/poseMath'
 import { usePoseCamera } from './features/pose/usePoseCamera'
 import {
   type CompletedRep,
+  type RejectedRep,
   type SquatPhase,
   SquatMachine,
   TARGET_REPETITIONS,
@@ -19,6 +20,11 @@ type Tracking = {
 type TestResult = {
   completedAt: string
   repetitions: number
+  attempts: number
+  rejectedAttempts: number
+  shallowRejected: number
+  trackingRejected: number
+  tooFastRejected: number
   score: number
   quality: number
   tempo: number
@@ -46,7 +52,7 @@ function readLastResult(): TestResult | null {
   }
 }
 
-function buildResult(repetitions: number, reps: CompletedRep[]): TestResult {
+function buildResult(repetitions: number, reps: CompletedRep[], rejectedReps: RejectedRep[]): TestResult {
   const quality = reps.length
     ? Math.round(reps.reduce((total, rep) => total + rep.qualityScore, 0) / reps.length)
     : 0
@@ -58,11 +64,20 @@ function buildResult(repetitions: number, reps: CompletedRep[]): TestResult {
     : 180
   const tempo = averageDuration ? Math.round(60000 / averageDuration) : 0
   const completion = Math.min(repetitions / TARGET_REPETITIONS, 1) * 100
-  const score = Math.round(completion * 0.55 + quality * 0.45)
+  const attempts = repetitions + rejectedReps.length
+  const acceptance = attempts ? (repetitions / attempts) * 100 : 0
+  const shallowRejected = rejectedReps.filter((rep) => rep.reason === 'shallow').length
+  const trackingRejected = rejectedReps.filter((rep) => rep.reason === 'tracking').length
+  const tooFastRejected = rejectedReps.filter((rep) => rep.reason === 'too_fast').length
+  const score = Math.round(completion * 0.3 + quality * 0.45 + acceptance * 0.25)
   const amplitude = averageDepth <= 98 ? 'Отличная' : averageDepth <= 105 ? 'Достаточная' : 'Нужна глубже'
   const recommendation =
-    averageDepth > 101
+    trackingRejected > 0
+      ? 'В следующем тесте держите всё тело в кадре: часть попыток потеряла трекинг.'
+      : shallowRejected > 0 || averageDepth > 101
       ? 'Сохраняйте ровный темп и опускайтесь чуть глубже.'
+      : tooFastRejected > 0
+        ? 'Сделайте движение спокойнее: быстрые попытки не засчитываются.'
       : quality >= 80
         ? 'Отличный контроль движения. Следующий шаг — новый челлендж.'
         : 'Сделайте движение спокойнее: контроль важнее скорости.'
@@ -70,6 +85,11 @@ function buildResult(repetitions: number, reps: CompletedRep[]): TestResult {
   return {
     completedAt: new Date().toISOString(),
     repetitions,
+    attempts,
+    rejectedAttempts: rejectedReps.length,
+    shallowRejected,
+    trackingRejected,
+    tooFastRejected,
     score,
     quality,
     tempo,
@@ -92,9 +112,11 @@ export default function App() {
   const machineRef = useRef(new SquatMachine())
   const viewRef = useRef<View>('landing')
   const repsRef = useRef<CompletedRep[]>([])
+  const rejectedRepsRef = useRef<RejectedRep[]>([])
   const [view, setView] = useState<View>('landing')
   const [countdown, setCountdown] = useState(3)
   const [repetitions, setRepetitions] = useState(0)
+  const [rejectedAttempts, setRejectedAttempts] = useState(0)
   const [phase, setPhase] = useState<SquatPhase>('idle')
   const [feedback, setFeedback] = useState('Встаньте в полный рост')
   const [tracking, setTracking] = useState<Tracking>({ kind: 'waiting', label: 'Ищем силуэт' })
@@ -131,6 +153,11 @@ export default function App() {
       setPhase((current) => (current === snapshot.phase ? current : snapshot.phase))
       setFeedback((current) => (current === snapshot.feedback ? current : snapshot.feedback))
       setRepetitions((current) => (current === snapshot.repetitions ? current : snapshot.repetitions))
+      setRejectedAttempts((current) => (current === snapshot.rejectedAttempts ? current : snapshot.rejectedAttempts))
+
+      if (snapshot.lastRejected) {
+        rejectedRepsRef.current = [...rejectedRepsRef.current, snapshot.lastRejected]
+      }
 
       if (!snapshot.lastRep) return
 
@@ -138,7 +165,7 @@ export default function App() {
       repsRef.current = allReps
       if (snapshot.repetitions < TARGET_REPETITIONS) return
 
-      const completed = buildResult(snapshot.repetitions, allReps)
+      const completed = buildResult(snapshot.repetitions, allReps, rejectedRepsRef.current)
       saveResult(completed)
       setResult(completed)
       setView('result')
@@ -165,7 +192,9 @@ export default function App() {
           window.clearInterval(timer)
           machineRef.current.reset()
           repsRef.current = []
+          rejectedRepsRef.current = []
           setRepetitions(0)
+          setRejectedAttempts(0)
           setPhase('standing')
           setFeedback('Готово. Начинайте приседание')
           setView('active')
@@ -198,7 +227,9 @@ export default function App() {
   const newTest = () => {
     machineRef.current.reset()
     repsRef.current = []
+    rejectedRepsRef.current = []
     setRepetitions(0)
+    setRejectedAttempts(0)
     setPhase('idle')
     setFeedback('Встаньте в полный рост')
     setResult(null)
@@ -253,7 +284,7 @@ export default function App() {
             <div className="last-result">
               <span>Последний результат на этом устройстве</span>
               <strong>{lastResult.score} <small>PHYGITAL SCORE</small></strong>
-              <p>{lastResult.repetitions}/{TARGET_REPETITIONS} корректных повторов · {lastResult.tempo} повторов/мин</p>
+              <p>{lastResult.repetitions}/{lastResult.attempts ?? TARGET_REPETITIONS} засчитано / попытки · {lastResult.tempo} повторов/мин</p>
             </div>
           )}
         </section>
@@ -286,6 +317,7 @@ export default function App() {
             <div className="exercise-label">ТЕСТ 01 / ПРИСЕДАНИЯ</div>
             <div className="rep-display"><strong>{repetitions}</strong><span>/ {TARGET_REPETITIONS}</span></div>
             <div className="progress-track"><span style={{ width: `${(repetitions / TARGET_REPETITIONS) * 100}%` }} /></div>
+            <p className="attempt-counter">Засчитано: {repetitions} · Не засчитано: {rejectedAttempts}</p>
 
             <div className="phase-card">
               <span>СТАТУС ДВИЖЕНИЯ</span>
@@ -308,7 +340,7 @@ export default function App() {
                 <span>{canStart ? 'Начать тест' : 'Ждём готовность камеры'}</span><b>→</b>
               </button>
             )}
-            {view === 'active' && <p className="active-note">Тест завершится автоматически после 10 корректных повторов.</p>}
+            {view === 'active' && <p className="active-note">Тест завершится после 10 засчитанных повторов. Недостаточно глубокие, слишком быстрые попытки и потеря трекинга не входят в результат.</p>}
           </aside>
         </section>
       )}
@@ -328,10 +360,14 @@ export default function App() {
               <div className="score-orbit" />
             </div>
             <div className="passport-metrics">
-              <Metric value={`${result.repetitions}/${TARGET_REPETITIONS}`} label="корректных повторов" />
+              <Metric value={`${result.repetitions}/${result.attempts}`} label="засчитано / попытки" />
               <Metric value={`${result.quality}%`} label="качество теста" />
               <Metric value={`${result.tempo}`} label="повторов в минуту" />
               <Metric value={result.amplitude} label="амплитуда" />
+            </div>
+            <div className="audit-line">
+              <span>ПРОЗРАЧНОСТЬ ТЕСТА</span>
+              <p>{result.rejectedAttempts === 0 ? 'Все начатые попытки были засчитаны.' : `Не засчитано: ${result.shallowRejected} из-за глубины, ${result.tooFastRejected} из-за темпа, ${result.trackingRejected} из-за трекинга.`}</p>
             </div>
             <div className="recommendation"><span>СЛЕДУЮЩИЙ ШАГ</span><p>{result.recommendation}</p></div>
             <div className="passport-bottom"><span>AI-ASSISTED MOTION TEST</span><span>LOCAL PROCESSING</span></div>
