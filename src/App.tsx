@@ -33,6 +33,8 @@ type TestResult = {
 }
 
 const LAST_RESULT_KEY = 'phygital-pass:last-result'
+const RESULT_HISTORY_KEY = 'phygital-pass:result-history'
+const MAX_LOCAL_RESULTS = 12
 
 const phaseLabels: Record<SquatPhase, string> = {
   idle: 'Калибровка',
@@ -49,6 +51,21 @@ function readLastResult(): TestResult | null {
     return stored ? (JSON.parse(stored) as TestResult) : null
   } catch {
     return null
+  }
+}
+
+function readResultHistory(): TestResult[] {
+  try {
+    const stored = window.localStorage.getItem(RESULT_HISTORY_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      if (Array.isArray(parsed)) return parsed.slice(0, MAX_LOCAL_RESULTS) as TestResult[]
+    }
+
+    const lastResult = readLastResult()
+    return lastResult ? [lastResult] : []
+  } catch {
+    return []
   }
 }
 
@@ -100,7 +117,12 @@ function buildResult(repetitions: number, reps: CompletedRep[], rejectedReps: Re
 
 function saveResult(result: TestResult): void {
   try {
+    const existingResults = readResultHistory().filter((item) => item.completedAt !== result.completedAt)
     window.localStorage.setItem(LAST_RESULT_KEY, JSON.stringify(result))
+    window.localStorage.setItem(
+      RESULT_HISTORY_KEY,
+      JSON.stringify([result, ...existingResults].slice(0, MAX_LOCAL_RESULTS)),
+    )
   } catch {
     // Сохранение результата не должно мешать прохождению теста.
   }
@@ -121,7 +143,8 @@ export default function App() {
   const [feedback, setFeedback] = useState('Встаньте в полный рост')
   const [tracking, setTracking] = useState<Tracking>({ kind: 'waiting', label: 'Ищем силуэт' })
   const [result, setResult] = useState<TestResult | null>(null)
-  const [lastResult] = useState<TestResult | null>(() => readLastResult())
+  const [history, setHistory] = useState<TestResult[]>(() => readResultHistory())
+  const lastResult = history[0] ?? null
 
   useEffect(() => {
     viewRef.current = view
@@ -167,6 +190,7 @@ export default function App() {
 
       const completed = buildResult(snapshot.repetitions, allReps, rejectedRepsRef.current)
       saveResult(completed)
+      setHistory((existing) => [completed, ...existing.filter((item) => item.completedAt !== completed.completedAt)].slice(0, MAX_LOCAL_RESULTS))
       setResult(completed)
       setView('result')
     },
@@ -284,7 +308,7 @@ export default function App() {
             <div className="last-result">
               <span>Последний результат на этом устройстве</span>
               <strong>{lastResult.score} <small>PHYGITAL SCORE</small></strong>
-              <p>{lastResult.repetitions}/{lastResult.attempts ?? TARGET_REPETITIONS} засчитано / попытки · {lastResult.tempo} повторов/мин</p>
+              <p>{lastResult.repetitions}/{lastResult.attempts ?? TARGET_REPETITIONS} засчитано / попытки · {lastResult.tempo} повторов/мин · {history.length} сохранено на устройстве</p>
             </div>
           )}
         </section>
@@ -372,6 +396,11 @@ export default function App() {
             <div className="recommendation"><span>СЛЕДУЮЩИЙ ШАГ</span><p>{result.recommendation}</p></div>
             <div className="passport-bottom"><span>AI-ASSISTED MOTION TEST</span><span>LOCAL PROCESSING</span></div>
           </div>
+          <ProgressCard
+            current={result}
+            previous={history.find((item) => item.completedAt !== result.completedAt) ?? null}
+            history={history}
+          />
           <div className="result-actions">
             <button className="primary-button" type="button" onClick={newTest}><span>Пройти ещё раз</span><b>↻</b></button>
             <button className="text-button" type="button" onClick={closeTest}>На главный экран</button>
@@ -388,6 +417,45 @@ function Stat({ label, value, suffix }: { label: string; value: string; suffix: 
 
 function Metric({ value, label }: { value: string; label: string }) {
   return <div><strong>{value}</strong><span>{label}</span></div>
+}
+
+function ProgressCard({ current, previous, history }: { current: TestResult; previous: TestResult | null; history: TestResult[] }) {
+  const acceptance = Math.round((current.repetitions / current.attempts) * 100)
+  const scoreChange = previous ? current.score - previous.score : null
+
+  return (
+    <section className="progress-card" aria-label="Динамика результатов">
+      <div className="progress-card-head">
+        <div><span>ДИНАМИКА</span><h2>Траектория на устройстве</h2></div>
+        <small>{history.length} сохранено локально</small>
+      </div>
+      <div className="progress-summary">
+        <div><span>ДОЛЯ ЗАСЧЁТА</span><strong>{acceptance}%</strong><p>{current.repetitions} из {current.attempts} начатых попыток</p></div>
+        <div><span>{previous ? 'К ПРЕДЫДУЩЕМУ ТЕСТУ' : 'БАЗОВАЯ ТОЧКА'}</span><strong className={scoreChange !== null && scoreChange < 0 ? 'score-down' : 'score-up'}>{scoreChange === null ? '—' : `${scoreChange > 0 ? '+' : ''}${scoreChange}`}</strong><p>{previous ? 'изменение Phygital Score' : 'следующий тест покажет динамику'}</p></div>
+      </div>
+      <div className="history-list">
+        {history.slice(0, 3).map((item) => {
+          const isCurrent = item.completedAt === current.completedAt
+          return (
+            <div className={`history-item${isCurrent ? ' current-history-item' : ''}`} key={item.completedAt}>
+              <span>{isCurrent ? 'ЭТОТ ТЕСТ' : formatResultDate(item.completedAt)}</span>
+              <strong>{item.score}</strong>
+              <small>{item.repetitions}/{item.attempts} засчитано</small>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+function formatResultDate(timestamp: string): string {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return 'РАНЕЕ'
+
+  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    .format(date)
+    .replace('.', '')
 }
 
 function LoadingMark() {
