@@ -20,6 +20,12 @@ type Tracking = {
   label: string
 }
 
+type MotionSignal = {
+  id: number
+  kind: 'accepted' | 'rejected'
+  message: string
+}
+
 type TestResult = {
   completedAt: string
   repetitions: number
@@ -145,6 +151,7 @@ export default function App() {
   const [phase, setPhase] = useState<SquatPhase>('idle')
   const [feedback, setFeedback] = useState('Встаньте в полный рост')
   const [tracking, setTracking] = useState<Tracking>({ kind: 'waiting', label: 'Ищем силуэт' })
+  const [motionSignal, setMotionSignal] = useState<MotionSignal | null>(null)
   const [result, setResult] = useState<TestResult | null>(null)
   const [history, setHistory] = useState<TestResult[]>(() => readResultHistory())
   const lastResult = history[0] ?? null
@@ -152,6 +159,13 @@ export default function App() {
   useEffect(() => {
     viewRef.current = view
   }, [view])
+
+  useEffect(() => {
+    if (!motionSignal || view !== 'active') return
+
+    const timer = window.setTimeout(() => setMotionSignal(null), 1300)
+    return () => window.clearTimeout(timer)
+  }, [motionSignal, view])
 
   const updateTracking = useCallback((next: Tracking) => {
     setTracking((current) => (current.kind === next.kind && current.label === next.label ? current : next))
@@ -183,9 +197,17 @@ export default function App() {
 
       if (snapshot.lastRejected) {
         rejectedRepsRef.current = [...rejectedRepsRef.current, snapshot.lastRejected]
+        setMotionSignal({
+          id: timestamp,
+          kind: 'rejected',
+          message: snapshot.feedback,
+        })
       }
 
       if (!snapshot.lastRep) return
+
+      setMotionSignal({ id: timestamp, kind: 'accepted', message: 'Повтор засчитан' })
+      if ('vibrate' in navigator) navigator.vibrate(18)
 
       const allReps = [...repsRef.current, snapshot.lastRep]
       repsRef.current = allReps
@@ -264,6 +286,7 @@ export default function App() {
   }, [view])
 
   const openCamera = () => {
+    setMotionSignal(null)
     setResult(null)
     setView('setup')
     void startCamera()
@@ -288,6 +311,7 @@ export default function App() {
     setRejectedAttempts(0)
     setPhase('idle')
     setFeedback('Встаньте в полный рост')
+    setMotionSignal(null)
     setResult(null)
     setView('setup')
     void startCamera()
@@ -360,6 +384,17 @@ export default function App() {
             <span className="corner corner-top-right" />
             <span className="corner corner-bottom-left" />
             <span className="corner corner-bottom-right" />
+            {(view === 'setup' || view === 'positioning' || view === 'calibrating') && (
+              <div className={`body-guide ${tracking.kind}`} aria-hidden="true">
+                <i className="guide-head" />
+                <i className="guide-torso" />
+                <i className="guide-arm guide-arm-left" />
+                <i className="guide-arm guide-arm-right" />
+                <i className="guide-leg guide-leg-left" />
+                <i className="guide-leg guide-leg-right" />
+                <span>ВЕСЬ РОСТ В КАДРЕ</span>
+              </div>
+            )}
 
             <div className="scan-line" />
             {cameraStatus === 'loading' && <div className="camera-message"><LoadingMark /> Подключаем камеру и модель движения…</div>}
@@ -367,7 +402,7 @@ export default function App() {
             {view === 'positioning' && <div className="camera-transition"><span>ОТОЙДИТЕ К КАМЕРЕ</span><strong>{countdown}</strong><p>Встаньте в полный рост. Тест запустится сам.</p></div>}
             {view === 'calibrating' && <div className="camera-transition camera-transition-ready"><span>КАЛИБРОВКА</span><strong>⌁</strong><p>{tracking.kind === 'ready' ? 'Силуэт найден. Готовим старт…' : 'Покажите плечо, таз, колени и стопы.'}</p></div>}
             {view === 'countdown' && <div className="countdown">{countdown}</div>}
-            {view === 'active' && <div className="live-feedback">{feedback}</div>}
+            {view === 'active' && <div className={`live-feedback ${motionSignal?.kind ?? ''}`} aria-live="polite">{motionSignal?.message ?? feedback}</div>}
           </div>
 
           <aside className="test-panel">
@@ -377,7 +412,7 @@ export default function App() {
             </div>
 
             <div className="exercise-label">ТЕСТ 01 / ПРИСЕДАНИЯ</div>
-            <div className="rep-display"><strong>{repetitions}</strong><span>/ {TARGET_REPETITIONS}</span></div>
+            <div className={`rep-display ${motionSignal?.kind ?? ''}`}><strong key={motionSignal?.id ?? 'counter'}>{repetitions}</strong><span>/ {TARGET_REPETITIONS}</span></div>
             <div className="progress-track"><span style={{ width: `${(repetitions / TARGET_REPETITIONS) * 100}%` }} /></div>
             <p className="attempt-counter">Засчитано: {repetitions} · Не засчитано: {rejectedAttempts}</p>
 
@@ -427,6 +462,7 @@ export default function App() {
               <Metric value={`${result.tempo}`} label="повторов в минуту" />
               <Metric value={result.amplitude} label="амплитуда" />
             </div>
+            <ScoreBreakdown result={result} />
             <div className="audit-line">
               <span>ПРОЗРАЧНОСТЬ ТЕСТА</span>
               <p>{result.rejectedAttempts === 0 ? 'Все начатые попытки были засчитаны.' : `Не засчитано: ${result.shallowRejected} из-за глубины, ${result.tooFastRejected} из-за темпа, ${result.trackingRejected} из-за трекинга.`}</p>
@@ -457,6 +493,30 @@ function Stat({ label, value, suffix }: { label: string; value: string; suffix: 
 
 function Metric({ value, label }: { value: string; label: string }) {
   return <div><strong>{value}</strong><span>{label}</span></div>
+}
+
+function ScoreBreakdown({ result }: { result: TestResult }) {
+  const completion = Math.round(Math.min(result.repetitions / TARGET_REPETITIONS, 1) * 100)
+  const acceptance = Math.round((result.repetitions / result.attempts) * 100)
+  const parts = [
+    { label: 'завершение', value: completion, weight: 30 },
+    { label: 'качество', value: result.quality, weight: 45 },
+    { label: 'доля зачёта', value: acceptance, weight: 25 },
+  ]
+
+  return (
+    <section className="score-breakdown" aria-label="Как рассчитан итоговый балл">
+      <div><span>СОСТАВ БАЛЛА</span><small>Итог — взвешенная сумма трёх показателей</small></div>
+      <div className="score-breakdown-bars">
+        {parts.map((part) => (
+          <div key={part.label}>
+            <div><span>{part.label}</span><strong>{part.value}% <small>вес {part.weight}%</small></strong></div>
+            <i><b style={{ width: `${part.value}%` }} /></i>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
 }
 
 function ProgressCard({ current, previous, history }: { current: TestResult; previous: TestResult | null; history: TestResult[] }) {
