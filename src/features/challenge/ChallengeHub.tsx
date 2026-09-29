@@ -68,7 +68,10 @@ export function ChallengeSubmission({ result }: { result: SubmissionResult }) {
         setChallenges(items.filter((challenge) => challenge.protocolVersion === 'squat-v1'))
         setSelectedId(items.find((challenge) => challenge.protocolVersion === 'squat-v1')?.id ?? '')
       })
-      .catch((reason: unknown) => setMessage(reason instanceof Error ? reason.message : 'Сервис челленджей недоступен.'))
+      .catch((reason: unknown) => {
+        const text = reason instanceof Error ? reason.message : ''
+        setMessage(text.includes('fetch') ? 'Сервис челленджей временно недоступен.' : (text || 'Сервис челленджей недоступен.'))
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -80,7 +83,8 @@ export function ChallengeSubmission({ result }: { result: SubmissionResult }) {
       const submitted = await submitChallengeResult(selectedId, alias.trim(), result)
       setMessage(`${submitted.notice} Итоговый балл: ${submitted.score}.`)
     } catch (reason: unknown) {
-      setMessage(reason instanceof Error ? reason.message : 'Не удалось отправить результат.')
+      const text = reason instanceof Error ? reason.message : ''
+      setMessage(text.includes('fetch') ? 'Ошибка сети. Проверьте интернет и повторите отправку.' : (text || 'Не удалось отправить результат.'))
     } finally {
       setLoading(false)
     }
