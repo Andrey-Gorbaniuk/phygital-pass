@@ -27,7 +27,6 @@ export type SquatSnapshot = {
   phase: SquatPhase
   repetitions: number
   rejectedAttempts: number
-  depthReady: boolean
   feedback: string
   lastRep?: CompletedRep
   lastRejected?: RejectedRep
@@ -80,7 +79,6 @@ export class SquatMachine {
   private repStartedAt?: number
   private minKneeAngle?: number
   private lastRepAt?: number
-  private depthReady = false
 
   reset(): void {
     this.phase = 'idle'
@@ -90,7 +88,6 @@ export class SquatMachine {
     this.repStartedAt = undefined
     this.minKneeAngle = undefined
     this.lastRepAt = undefined
-    this.depthReady = false
   }
 
   process(observation: SquatObservation): SquatSnapshot {
@@ -130,8 +127,6 @@ export class SquatMachine {
     if (this.phase === 'bottom') {
       this.captureMinAngle(kneeAngle)
       const bottomHeldLongEnough = timestamp - (this.bottomAt ?? timestamp) >= BOTTOM_HOLD_MS
-
-      if (bottomHeldLongEnough) this.depthReady = true
 
       if (kneeAngle >= STANDING_ANGLE && !bottomHeldLongEnough) {
         this.phase = 'standing'
@@ -205,7 +200,6 @@ export class SquatMachine {
     this.bottomAt = undefined
     this.repStartedAt = undefined
     this.minKneeAngle = undefined
-    this.depthReady = false
   }
 
   private snapshot(lastRep?: CompletedRep, lastRejected?: RejectedRep): SquatSnapshot {
@@ -213,7 +207,6 @@ export class SquatMachine {
       phase: this.phase,
       repetitions: this.repetitions,
       rejectedAttempts: this.rejectedAttempts,
-      depthReady: this.depthReady,
       feedback: lastRejected ? rejectionFeedback(lastRejected.reason) : feedbackFor(this.phase),
       lastRep,
       lastRejected,

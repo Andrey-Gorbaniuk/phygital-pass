@@ -5,7 +5,6 @@ import { usePoseCamera } from './features/pose/usePoseCamera'
 import { ChallengeHub, ChallengeSubmission } from './features/challenge/ChallengeHub'
 import { OrganizerConsole } from './features/admin/OrganizerConsole'
 import { downloadResultCard } from './features/share/shareResult'
-import { SQUAT_PROTOCOL } from './features/squat/protocol'
 import {
   type CompletedRep,
   type RejectedRep,
@@ -153,8 +152,6 @@ export default function App() {
   const [feedback, setFeedback] = useState('Встаньте в полный рост')
   const [tracking, setTracking] = useState<Tracking>({ kind: 'waiting', label: 'Ищем силуэт' })
   const [motionSignal, setMotionSignal] = useState<MotionSignal | null>(null)
-  const [depthPercent, setDepthPercent] = useState(0)
-  const [depthReady, setDepthReady] = useState(false)
   const [result, setResult] = useState<TestResult | null>(null)
   const [history, setHistory] = useState<TestResult[]>(() => readResultHistory())
   const lastResult = history[0] ?? null
@@ -187,14 +184,6 @@ export default function App() {
 
       if (viewRef.current !== 'active') return
 
-      const nextDepth = assessment.kneeAngle === undefined
-        ? 0
-        : Math.round(Math.min(Math.max(
-          ((SQUAT_PROTOCOL.standingAngle - assessment.kneeAngle) / (SQUAT_PROTOCOL.standingAngle - SQUAT_PROTOCOL.bottomAngle)) * 100,
-          0,
-        ), 100))
-      setDepthPercent((current) => (current === nextDepth ? current : nextDepth))
-
       const snapshot = machineRef.current.process({
         timestamp,
         isVisible: assessment.isVisible && assessment.poseCount === 1,
@@ -205,7 +194,6 @@ export default function App() {
       setFeedback((current) => (current === snapshot.feedback ? current : snapshot.feedback))
       setRepetitions((current) => (current === snapshot.repetitions ? current : snapshot.repetitions))
       setRejectedAttempts((current) => (current === snapshot.rejectedAttempts ? current : snapshot.rejectedAttempts))
-      setDepthReady((current) => (current === snapshot.depthReady ? current : snapshot.depthReady))
 
       if (snapshot.lastRejected) {
         rejectedRepsRef.current = [...rejectedRepsRef.current, snapshot.lastRejected]
@@ -285,8 +273,6 @@ export default function App() {
           rejectedRepsRef.current = []
           setRepetitions(0)
           setRejectedAttempts(0)
-          setDepthPercent(0)
-          setDepthReady(false)
           setPhase('standing')
           setFeedback('Готово. Начинайте приседание')
           setView('active')
@@ -301,8 +287,6 @@ export default function App() {
 
   const openCamera = () => {
     setMotionSignal(null)
-    setDepthPercent(0)
-    setDepthReady(false)
     setResult(null)
     setView('setup')
     void startCamera()
@@ -328,8 +312,6 @@ export default function App() {
     setPhase('idle')
     setFeedback('Встаньте в полный рост')
     setMotionSignal(null)
-    setDepthPercent(0)
-    setDepthReady(false)
     setResult(null)
     setView('setup')
     void startCamera()
@@ -434,8 +416,6 @@ export default function App() {
             <div className="progress-track"><span style={{ width: `${(repetitions / TARGET_REPETITIONS) * 100}%` }} /></div>
             <p className="attempt-counter">Засчитано: {repetitions} · Не засчитано: {rejectedAttempts}</p>
 
-            {view === 'active' && <DepthMeter percent={depthPercent} ready={depthReady} />}
-
             <div className="phase-card">
               <span>СТАТУС ДВИЖЕНИЯ</span>
               <strong>{phaseLabels[phase]}</strong>
@@ -513,24 +493,6 @@ function Stat({ label, value, suffix }: { label: string; value: string; suffix: 
 
 function Metric({ value, label }: { value: string; label: string }) {
   return <div><strong>{value}</strong><span>{label}</span></div>
-}
-
-function DepthMeter({ percent, ready }: { percent: number; ready: boolean }) {
-  const message = ready
-    ? 'Глубина подтверждена — можно вставать'
-    : percent >= 80
-      ? 'Ещё немного ниже'
-      : 'Опускайтесь ниже'
-
-  return (
-    <section className={`depth-meter${ready ? ' ready' : ''}`} aria-live="polite" aria-label="Текущая глубина приседания">
-      <div className="depth-meter-head"><span>ГЛУБИНА ПРИСЕДА</span><strong>{ready ? 'ГОТОВО' : `${percent}%`}</strong></div>
-      <div className="depth-meter-content">
-        <div className="depth-meter-track"><i style={{ height: `${percent}%` }} /><b /></div>
-        <p>{message}</p>
-      </div>
-    </section>
-  )
 }
 
 function ScoreBreakdown({ result }: { result: TestResult }) {
