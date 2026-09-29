@@ -4,7 +4,6 @@ import { assessPose } from './features/pose/poseMath'
 import { usePoseCamera } from './features/pose/usePoseCamera'
 import { ChallengeHub, ChallengeSubmission } from './features/challenge/ChallengeHub'
 import { OrganizerConsole } from './features/admin/OrganizerConsole'
-import { ReactionLab } from './features/reaction/ReactionLab'
 import { downloadResultCard } from './features/share/shareResult'
 import {
   type CompletedRep,
@@ -14,7 +13,7 @@ import {
   TARGET_REPETITIONS,
 } from './features/squat/squatMachine'
 
-type View = 'landing' | 'setup' | 'countdown' | 'active' | 'result' | 'challenges' | 'organizer' | 'reaction'
+type View = 'landing' | 'setup' | 'countdown' | 'active' | 'result' | 'challenges' | 'organizer'
 
 type Tracking = {
   kind: 'waiting' | 'ready' | 'multiple' | 'lost'
@@ -277,7 +276,7 @@ export default function App() {
           <span className="brand-mark"><i /><i /><i /></span>
           <span>PHYGITAL <b>PASS</b></span>
         </button>
-        <div className="topbar-links"><button type="button" onClick={() => { stopCamera(); setView('reaction') }}>Реакция</button><button type="button" onClick={() => { stopCamera(); setView('challenges') }}>Челленджи</button><button type="button" onClick={() => { stopCamera(); setView('organizer') }}>Организатор</button><span className="topbar-note">MOTION INTELLIGENCE / 01</span></div>
+        <div className="topbar-links"><button type="button" onClick={() => { stopCamera(); setView('challenges') }}>Челленджи</button><button type="button" onClick={() => { stopCamera(); setView('organizer') }}>Организатор</button><span className="topbar-note">MOTION INTELLIGENCE / 01</span></div>
       </header>
 
       {view === 'landing' && (
@@ -304,7 +303,6 @@ export default function App() {
             <span className="privacy-note">Видео обрабатывается только на устройстве</span>
           </div>
           <button className="landing-challenge-link" type="button" onClick={() => setView('challenges')}>Открыть активные челленджи <b>↗</b></button>
-          <button className="landing-challenge-link reaction-link" type="button" onClick={() => setView('reaction')}>Пройти тест реакции <b>↗</b></button>
           <div className="hero-stats">
             <Stat label="Тест" value="10" suffix=" повторов" />
             <Stat label="Режим" value="LIVE" suffix=" анализ" />
@@ -322,7 +320,6 @@ export default function App() {
 
       {view === 'challenges' && <ChallengeHub onClose={closeTest} />}
       {view === 'organizer' && <OrganizerConsole onClose={closeTest} />}
-      {view === 'reaction' && <ReactionLab onClose={closeTest} />}
 
       {(view === 'setup' || view === 'countdown' || view === 'active') && (
         <section className="test-screen screen-enter">
@@ -414,7 +411,6 @@ export default function App() {
           <ChallengeSubmission result={result} />
           <div className="result-actions">
             <button className="primary-button" type="button" onClick={newTest}><span>Пройти ещё раз</span><b>↻</b></button>
-            <button className="text-button" type="button" onClick={() => setView('reaction')}>Тест реакции</button>
             <button className="text-button" type="button" onClick={() => downloadResultCard(result)}>Скачать карточку</button>
             <button className="text-button" type="button" onClick={closeTest}>На главный экран</button>
           </div>
