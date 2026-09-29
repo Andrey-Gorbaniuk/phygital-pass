@@ -6,6 +6,7 @@
 
 ## Документация
 
+- [Краткое описание проекта](docs/SHORT_DESCRIPTION.md)
 - [Контекст задачи и продуктовая концепция](docs/PROJECT_BRIEF.md)
 - [Решения и границы первой версии](docs/PRODUCT_DECISIONS.md)
 - [Очередность развития продукта](docs/ROADMAP.md)
