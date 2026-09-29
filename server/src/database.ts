@@ -3,12 +3,13 @@ import { Pool, type QueryResultRow } from 'pg'
 export type Database = Pick<Pool, 'query'>
 
 export function createDatabase(connectionString: string): Pool {
+  const hostname = new URL(connectionString).hostname
+  const isPrivateDatabase = hostname === 'database' || hostname === 'localhost' || hostname === '127.0.0.1'
+
   return new Pool({
     connectionString,
     max: 10,
-    ssl: connectionString.includes('localhost') || connectionString.includes('127.0.0.1')
-      ? false
-      : { rejectUnauthorized: false },
+    ssl: isPrivateDatabase ? false : { rejectUnauthorized: false },
   })
 }
 

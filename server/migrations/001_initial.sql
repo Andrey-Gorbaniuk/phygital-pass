@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE protocol_versions (
+CREATE TABLE IF NOT EXISTS protocol_versions (
   id TEXT PRIMARY KEY,
   exercise TEXT NOT NULL CHECK (exercise = 'squat'),
   configuration JSONB NOT NULL,
@@ -16,13 +16,13 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
-CREATE TABLE teams (
+CREATE TABLE IF NOT EXISTS teams (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL UNIQUE CHECK (char_length(name) BETWEEN 2 AND 48),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE participants (
+CREATE TABLE IF NOT EXISTS participants (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   alias TEXT NOT NULL UNIQUE CHECK (char_length(alias) BETWEEN 2 AND 24),
   token_hash TEXT NOT NULL UNIQUE,
@@ -32,7 +32,7 @@ CREATE TABLE participants (
   deleted_at TIMESTAMPTZ
 );
 
-CREATE TABLE challenges (
+CREATE TABLE IF NOT EXISTS challenges (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL CHECK (char_length(title) BETWEEN 3 AND 80),
   description TEXT NOT NULL DEFAULT '',
@@ -44,7 +44,7 @@ CREATE TABLE challenges (
   CHECK (ends_at > starts_at)
 );
 
-CREATE TABLE submissions (
+CREATE TABLE IF NOT EXISTS submissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   challenge_id UUID NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
   participant_id UUID NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
@@ -66,5 +66,5 @@ CREATE TABLE submissions (
   UNIQUE (challenge_id, participant_id)
 );
 
-CREATE INDEX submissions_leaderboard_idx ON submissions (challenge_id, verification_status, score DESC, quality DESC, created_at ASC);
-CREATE INDEX challenges_public_idx ON challenges (status, starts_at, ends_at);
+CREATE INDEX IF NOT EXISTS submissions_leaderboard_idx ON submissions (challenge_id, verification_status, score DESC, quality DESC, created_at ASC);
+CREATE INDEX IF NOT EXISTS challenges_public_idx ON challenges (status, starts_at, ends_at);
