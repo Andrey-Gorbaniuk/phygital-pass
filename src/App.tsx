@@ -13,7 +13,7 @@ import {
   TARGET_REPETITIONS,
 } from './features/squat/squatMachine'
 
-type View = 'landing' | 'setup' | 'countdown' | 'active' | 'result' | 'challenges' | 'organizer'
+type View = 'landing' | 'setup' | 'positioning' | 'calibrating' | 'countdown' | 'active' | 'result' | 'challenges' | 'organizer'
 
 type Tracking = {
   kind: 'waiting' | 'ready' | 'multiple' | 'lost'
@@ -211,6 +211,35 @@ export default function App() {
   }, [stopCamera, view])
 
   useEffect(() => {
+    if (view !== 'positioning') return
+
+    const timer = window.setInterval(() => {
+      setCountdown((current) => {
+        if (current <= 1) {
+          window.clearInterval(timer)
+          setView('calibrating')
+          return 0
+        }
+        return current - 1
+      })
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [view])
+
+  useEffect(() => {
+    if (view !== 'calibrating' || tracking.kind !== 'ready') return
+
+    const timer = window.setTimeout(() => {
+      if (viewRef.current !== 'calibrating') return
+      setCountdown(3)
+      setView('countdown')
+    }, 900)
+
+    return () => window.clearTimeout(timer)
+  }, [tracking.kind, view])
+
+  useEffect(() => {
     if (view !== 'countdown') return
 
     const timer = window.setInterval(() => {
@@ -241,9 +270,9 @@ export default function App() {
   }
 
   const startTest = () => {
-    if (cameraStatus !== 'ready' || tracking.kind !== 'ready') return
-    setCountdown(3)
-    setView('countdown')
+    if (cameraStatus !== 'ready') return
+    setCountdown(7)
+    setView('positioning')
   }
 
   const closeTest = () => {
@@ -264,7 +293,7 @@ export default function App() {
     void startCamera()
   }
 
-  const canStart = cameraStatus === 'ready' && tracking.kind === 'ready'
+  const canStart = cameraStatus === 'ready'
 
   return (
     <main className="app-shell">
@@ -321,7 +350,7 @@ export default function App() {
       {view === 'challenges' && <ChallengeHub onClose={closeTest} />}
       {view === 'organizer' && <OrganizerConsole onClose={closeTest} />}
 
-      {(view === 'setup' || view === 'countdown' || view === 'active') && (
+      {(view === 'setup' || view === 'positioning' || view === 'calibrating' || view === 'countdown' || view === 'active') && (
         <section className="test-screen screen-enter">
           <div className="camera-stage">
             <video ref={videoRef} className="camera-feed" muted playsInline />
@@ -335,6 +364,8 @@ export default function App() {
             <div className="scan-line" />
             {cameraStatus === 'loading' && <div className="camera-message"><LoadingMark /> Подключаем камеру и модель движения…</div>}
             {cameraStatus === 'error' && <div className="camera-message error-message">{error ?? 'Не удалось запустить камеру.'}</div>}
+            {view === 'positioning' && <div className="camera-transition"><span>ОТОЙДИТЕ К КАМЕРЕ</span><strong>{countdown}</strong><p>Встаньте в полный рост. Тест запустится сам.</p></div>}
+            {view === 'calibrating' && <div className="camera-transition camera-transition-ready"><span>КАЛИБРОВКА</span><strong>⌁</strong><p>{tracking.kind === 'ready' ? 'Силуэт найден. Готовим старт…' : 'Покажите плечо, таз, колени и стопы.'}</p></div>}
             {view === 'countdown' && <div className="countdown">{countdown}</div>}
             {view === 'active' && <div className="live-feedback">{feedback}</div>}
           </div>
@@ -359,7 +390,7 @@ export default function App() {
             {view === 'setup' && (
               <div className="setup-instructions">
                 <span className="step-index">01</span>
-                <div><strong>Встаньте целиком в кадр</strong><p>Камере должны быть видны плечо, таз, колени и стопы. Рядом не должно быть других людей.</p></div>
+                <div><strong>Сначала нажмите кнопку, потом отойдите</strong><p>У вас будет 7 секунд, чтобы встать целиком в кадр. Когда камера найдёт силуэт, обратный отсчёт начнётся автоматически.</p></div>
               </div>
             )}
 
@@ -368,7 +399,7 @@ export default function App() {
             )}
             {view === 'setup' && cameraStatus !== 'error' && (
               <button className="primary-button start-button" type="button" disabled={!canStart} onClick={startTest}>
-                <span>{canStart ? 'Начать тест' : 'Ждём готовность камеры'}</span><b>→</b>
+                <span>{canStart ? 'Я готов — отойду к камере' : 'Подключаем камеру'}</span><b>→</b>
               </button>
             )}
             {view === 'active' && <p className="active-note">Тест завершится после 10 засчитанных повторов. Недостаточно глубокие, слишком быстрые попытки и потеря трекинга не входят в результат.</p>}
