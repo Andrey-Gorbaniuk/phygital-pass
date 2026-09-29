@@ -65,6 +65,20 @@ describe('SquatMachine', () => {
     expect(result.lastRejected?.reason).toBe('shallow')
   })
 
+  it('marks the depth as ready only after the required bottom hold', () => {
+    const machine = new SquatMachine()
+
+    machine.process(visible(0, 170))
+    machine.process(visible(200, 145))
+    const reachedDepth = machine.process(visible(400, 100))
+    const readyToRise = machine.process(visible(560, 100))
+    const rising = machine.process(visible(620, 130))
+
+    expect(reachedDepth.depthReady).toBe(false)
+    expect(readyToRise.depthReady).toBe(true)
+    expect(rising.depthReady).toBe(true)
+  })
+
   it('pauses a sequence when pose visibility is lost without resetting previous progress', () => {
     const machine = new SquatMachine()
     completeRep(machine)
