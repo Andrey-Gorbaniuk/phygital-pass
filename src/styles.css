@@ -420,6 +420,26 @@ h1 em { color: #5eeeff; font-style: normal; text-shadow: 0 0 35px rgba(94, 238, 
   font-size: clamp(1.8rem, 3.5vw, 2.4rem);
   letter-spacing: -.03em;
 }
+.modal-illustration-card {
+  width: 100%;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 14px 0 20px;
+  border: 1px solid rgba(115, 235, 255, .35);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .45), 0 0 25px rgba(88, 234, 255, .15);
+  overflow: hidden;
+}
+.modal-illustration-img {
+  max-height: 195px;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  display: block;
+}
 .modal-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

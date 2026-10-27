@@ -29,6 +29,7 @@ export const EXERCISE_REGISTRY: ExerciseDefinition[] = [
       max: '3 подхода по 21 повторению (отдых до 1.5 минут)',
     },
     controlJoints: ['Локтевой сустав (сгиб < 90°)', 'Плечо-таз-пятка (прямая спина)', 'Кистевой упор'],
+    imageUrl: '/exercises/ex_1_pushups.png',
   },
   {
     id: 'vup',
@@ -58,6 +59,7 @@ export const EXERCISE_REGISTRY: ExerciseDefinition[] = [
       max: '3 подхода по 22 повторения (отдых до 1.5 минут)',
     },
     controlJoints: ['Тазобедренный угол (< 95°)', 'Прямые колени', 'Высота удержания пяток над полом'],
+    imageUrl: '/exercises/ex_2_vup.png',
   },
   {
     id: 'squat',
@@ -87,6 +89,7 @@ export const EXERCISE_REGISTRY: ExerciseDefinition[] = [
       max: '3 подхода по 25 повторений (отдых до 1.5 минут)',
     },
     controlJoints: ['Коленный сустав (< 105°)', 'Осанка и нейтраль спины', 'Пятки на полу'],
+    imageUrl: '/exercises/ex_3_squat.png',
   },
   {
     id: 'superman',
@@ -114,6 +117,7 @@ export const EXERCISE_REGISTRY: ExerciseDefinition[] = [
       max: '3 подхода по 30 повторений (отдых до 1.5 минут)',
     },
     controlJoints: ['Высота подъёма запястий и стоп', 'Прогиб грудного отдела', 'Фиксация 1 сек'],
+    imageUrl: '/exercises/ex_4_superman.png',
   },
   {
     id: 'moving_plank',
@@ -142,6 +146,7 @@ export const EXERCISE_REGISTRY: ExerciseDefinition[] = [
       max: '3 подхода по 18 переходов / 60 сек (отдых до 1.5 минут)',
     },
     controlJoints: ['Прямая линия таза и спины', 'Сгиб локтевых суставов', 'Отсутствие провисания таза'],
+    imageUrl: '/exercises/ex_5_moving_plank.png',
   },
   {
     id: 'single_leg_bridge',
@@ -169,6 +174,7 @@ export const EXERCISE_REGISTRY: ExerciseDefinition[] = [
       max: '3 подхода по 20 повторений на ногу (отдых до 1.5 минут)',
     },
     controlJoints: ['Высота подъёма таза', 'Вертикаль поднятой ноги', 'Сгиб опорного колена'],
+    imageUrl: '/exercises/ex_6_single_leg_bridge.png',
   },
   {
     id: 'spiderman',
@@ -197,6 +203,7 @@ export const EXERCISE_REGISTRY: ExerciseDefinition[] = [
       max: '3 подхода по 20 повторений (отдых до 1.5 минут)',
     },
     controlJoints: ['Сближение колена с локтем (< 22 см)', 'Горизонталь таза', 'Упор рук'],
+    imageUrl: '/exercises/ex_7_spiderman.png',
   },
   {
     id: 'side_plank',
@@ -224,6 +231,7 @@ export const EXERCISE_REGISTRY: ExerciseDefinition[] = [
       max: '3 подхода по 18 повторений на сторону (отдых до 1.5 минут)',
     },
     controlJoints: ['Амплитуда движения таза', 'Опорный локоть под плечом', 'Фронтальная плоскость'],
+    imageUrl: '/exercises/ex_8_side_plank.png',
   },
   {
     id: 'knee_tucks',
@@ -251,6 +259,7 @@ export const EXERCISE_REGISTRY: ExerciseDefinition[] = [
       max: '3 подхода по 25 повторений (отдых до 1.5 минут)',
     },
     controlJoints: ['Синхронность коленей', 'Планка при возврате', 'Стабильность кистей'],
+    imageUrl: '/exercises/ex_9_knee_tucks.png',
   },
   {
     id: 'roll_to_squat',
@@ -277,6 +286,7 @@ export const EXERCISE_REGISTRY: ExerciseDefinition[] = [
       max: '3 подхода по 15 повторений (отдых до 1.5 минут)',
     },
     controlJoints: ['Группировка спины', 'Вставание без помощи рук', 'Фиксация полного роста'],
+    imageUrl: '/exercises/ex_10_roll_to_squat.png',
   },
   {
     id: 'split_lunges',
@@ -304,6 +314,7 @@ export const EXERCISE_REGISTRY: ExerciseDefinition[] = [
       max: '3 подхода по 24 повторения (отдых до 1.5 минут)',
     },
     controlJoints: ['Угол сгиба коленей (90°)', 'Мягкость приземления', 'Вертикаль корпуса'],
+    imageUrl: '/exercises/ex_11_split_lunges.png',
   },
   {
     id: 'burpee',
@@ -331,5 +342,6 @@ export const EXERCISE_REGISTRY: ExerciseDefinition[] = [
       max: '3 подхода по 16 повторений (отдых до 1.5 минут)',
     },
     controlJoints: ['Касание грудью пола', 'Выпрыгивание вверх', 'Хлопок над головой'],
+    imageUrl: '/exercises/ex_12_burpee.png',
   },
 ]

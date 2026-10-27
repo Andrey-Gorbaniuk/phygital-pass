@@ -43,6 +43,7 @@ export type ExerciseDefinition = {
   technique: string[]
   dosage: ExerciseDosage
   controlJoints: string[]
+  imageUrl?: string
 }
 
 export type ExercisePhase = 'idle' | 'ready' | 'contracting' | 'peak' | 'returning' | 'paused'

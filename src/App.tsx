@@ -530,6 +530,17 @@ export default function App() {
               <p style={{ color: 'rgba(215, 239, 250, .72)' }}>{detailExercise.description}</p>
             </div>
 
+            {detailExercise.imageUrl && (
+              <div className="modal-illustration-card">
+                <img
+                  src={detailExercise.imageUrl}
+                  alt={detailExercise.title}
+                  className="modal-illustration-img"
+                  loading="lazy"
+                />
+              </div>
+            )}
+
             <div className="modal-grid">
               <div className="modal-box">
                 <span>Требуемый ракурс камеры</span>
