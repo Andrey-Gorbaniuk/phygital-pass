@@ -107,12 +107,15 @@ export default function App() {
   const [selectedExercise, setSelectedExercise] = useState<ExerciseDefinition>(EXERCISE_REGISTRY[0])
   const [detailExercise, setDetailExercise] = useState<ExerciseDefinition | null>(null)
   const [filterCategory, setFilterCategory] = useState<string>('all')
+  const catalogScrollYRef = useRef<number>(0)
 
   useEffect(() => {
     if (detailExercise) {
+      const savedScrollY = window.scrollY
       document.body.classList.add('modal-open')
       return () => {
         document.body.classList.remove('modal-open')
+        window.scrollTo({ top: savedScrollY, behavior: 'instant' })
       }
     }
   }, [detailExercise])
@@ -311,11 +314,13 @@ export default function App() {
   }, [selectedExercise, view])
 
   const startExercise = (exercise: ExerciseDefinition) => {
+    catalogScrollYRef.current = window.scrollY
     setSelectedExercise(exercise)
     setMotionSignal(null)
     setResult(null)
     machineRef.current = createExerciseMachine(exercise.id, exercise.targetReps)
     setView('setup')
+    window.scrollTo({ top: 0, behavior: 'instant' })
     void startCamera()
   }
 
@@ -328,6 +333,9 @@ export default function App() {
   const closeToHome = () => {
     stopCamera()
     setView('catalog')
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: catalogScrollYRef.current, behavior: 'instant' })
+    })
   }
 
   const restartCurrentTest = () => {
@@ -695,25 +703,24 @@ export default function App() {
               <span className={`status-pill ${tracking.kind}`}>
                 <i /> {cameraStatus === 'loading' ? 'Подключение' : tracking.label}
               </span>
-              <button type="button" className="quiet-button" onClick={closeToHome}>Закрыть</button>
-            </div>
-
-            <div className="exercise-label">
-              НОРМАТИВ {selectedExercise.order} / {selectedExercise.shortTitle.toUpperCase()}
             </div>
 
             {view === 'setup' ? (
               <div className="setup-panel-body">
-                <div className="setup-goal-row">
-                  <span>Целевой норматив:</span>
-                  <strong>{selectedExercise.targetReps} {selectedExercise.unitLabel}</strong>
+                <div className="setup-summary-row">
+                  <span className="setup-exercise-title">
+                    НОРМАТИВ {selectedExercise.order} · {selectedExercise.shortTitle.toUpperCase()}
+                  </span>
+                  <span className="setup-target-badge">
+                    Норма: <strong>{selectedExercise.targetReps} {selectedExercise.unitLabel}</strong>
+                  </span>
                 </div>
 
-                <div className="setup-instructions">
-                  <span className="step-index">01</span>
-                  <div>
+                <div className="setup-hint-box">
+                  <span className="setup-hint-step">01</span>
+                  <div className="setup-hint-text">
                     <strong>{selectedExercise.cameraAngle}</strong>
-                    <p>Поставьте телефон на расстоянии {selectedExercise.cameraDistance}. После нажатия кнопки у вас будет 6 секунд занять исходное положение.</p>
+                    <span>({selectedExercise.cameraDistance}) · 6 сек на подготовку</span>
                   </div>
                 </div>
 
@@ -731,6 +738,9 @@ export default function App() {
               </div>
             ) : (
               <>
+                <div className="exercise-label">
+                  НОРМАТИВ {selectedExercise.order} / {selectedExercise.shortTitle.toUpperCase()}
+                </div>
                 <div className={`rep-display ${motionSignal?.kind ?? ''}`}>
                   <strong key={motionSignal?.id ?? 'counter'}>{repetitions}</strong>
                   <span>/ {selectedExercise.targetReps} {selectedExercise.unitLabel}</span>
