@@ -1,4 +1,4 @@
-const CACHE = 'phygital-pass-static-v2'
+const CACHE = 'phygital-pass-static-v3'
 
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (event) => {
@@ -27,14 +27,33 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  const isImage = request.destination === 'image' || /\.(png|jpe?g|webp|svg|ico)$/i.test(url.pathname)
+
   event.respondWith(
-    caches.match(request).then((cached) => cached ?? fetch(request).then((response) => {
-      if (response.ok && response.type === 'basic') {
-        const copy = response.clone()
-        void caches.open(CACHE).then((cache) => cache.put(request, copy))
+    caches.match(request).then((cached) => {
+      // If cached response for an image accidentally received text/html earlier, discard it
+      if (cached && isImage && cached.headers.get('content-type')?.includes('text/html')) {
+        return fetch(request).then((response) => {
+          if (response.ok && response.type === 'basic' && !response.headers.get('content-type')?.includes('text/html')) {
+            const copy = response.clone()
+            void caches.open(CACHE).then((cache) => cache.put(request, copy))
+          }
+          return response
+        })
       }
-      return response
-    })),
+      return cached ?? fetch(request).then((response) => {
+        if (response.ok && response.type === 'basic') {
+          // Never cache HTML as image
+          if (isImage && response.headers.get('content-type')?.includes('text/html')) {
+            return response
+          }
+          const copy = response.clone()
+          void caches.open(CACHE).then((cache) => cache.put(request, copy))
+        }
+        return response
+      })
+    })
   )
 })
+
 

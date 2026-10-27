@@ -359,36 +359,38 @@ export default function App() {
       <div className="ambient ambient-two" />
       <div className="grid-overlay" />
 
-      <header className="topbar">
-        <div className="brand" aria-label="Phygital Pass">
-          <span className="brand-mark"><i /><i /><i /></span>
-          <span>PHYGITAL <b>PASS</b></span>
-        </div>
-        <div className="topbar-links">
-          <button
-            type="button"
-            className={view === 'catalog' || view === 'setup' || view === 'positioning' || view === 'calibrating' || view === 'countdown' || view === 'active' || view === 'result' ? 'active-nav' : ''}
-            onClick={() => { stopCamera(); setView('catalog') }}
-          >
-            Нормативы
-          </button>
-          <button
-            type="button"
-            className={view === 'challenges' ? 'active-nav' : ''}
-            onClick={() => { stopCamera(); setView('challenges') }}
-          >
-            Челленджи
-          </button>
-          <button
-            type="button"
-            className={view === 'organizer' ? 'active-nav' : ''}
-            onClick={() => { stopCamera(); setView('organizer') }}
-          >
-            Организатор
-          </button>
-          <span className="topbar-note">МТУСИ / КАФЕДРА ФИЗВОСПИТАНИЯ</span>
-        </div>
-      </header>
+      {(view === 'catalog' || view === 'challenges' || view === 'organizer' || view === 'result') && (
+        <header className="topbar">
+          <div className="brand" aria-label="Phygital Pass">
+            <span className="brand-mark"><i /><i /><i /></span>
+            <span>PHYGITAL <b>PASS</b></span>
+          </div>
+          <div className="topbar-links">
+            <button
+              type="button"
+              className={view === 'catalog' || view === 'result' ? 'active-nav' : ''}
+              onClick={() => { stopCamera(); setView('catalog') }}
+            >
+              Нормативы
+            </button>
+            <button
+              type="button"
+              className={view === 'challenges' ? 'active-nav' : ''}
+              onClick={() => { stopCamera(); setView('challenges') }}
+            >
+              Челленджи
+            </button>
+            <button
+              type="button"
+              className={view === 'organizer' ? 'active-nav' : ''}
+              onClick={() => { stopCamera(); setView('organizer') }}
+            >
+              Организатор
+            </button>
+            <span className="topbar-note">МТУСИ / КАФЕДРА ФИЗВОСПИТАНИЯ</span>
+          </div>
+        </header>
+      )}
 
       {/* VIEW: CATALOG OF 12 STANDARDS (DEFAULT HOME) */}
       {view === 'catalog' && (
@@ -455,6 +457,15 @@ export default function App() {
               <article
                 key={exercise.id}
                 className={`exercise-card ${exercise.isInteractive ? 'interactive' : 'spec'}`}
+                onClick={() => setDetailExercise(exercise)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    setDetailExercise(exercise)
+                  }
+                }}
               >
                 <div className="card-top">
                   <span className="card-order">№ {exercise.order < 10 ? `0${exercise.order}` : exercise.order}</span>
@@ -486,7 +497,10 @@ export default function App() {
                     <button
                       className="card-btn start-interactive"
                       type="button"
-                      onClick={() => startExercise(exercise)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        startExercise(exercise)
+                      }}
                     >
                       <span>Сдать норматив на камеру</span>
                       <b>→</b>
@@ -494,7 +508,10 @@ export default function App() {
                     <button
                       className="card-btn view-spec-secondary"
                       type="button"
-                      onClick={() => setDetailExercise(exercise)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setDetailExercise(exercise)
+                      }}
                     >
                       <span>Методические правила и углы</span>
                       <b>↗</b>
@@ -504,7 +521,10 @@ export default function App() {
                   <button
                     className="card-btn view-spec"
                     type="button"
-                    onClick={() => setDetailExercise(exercise)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setDetailExercise(exercise)
+                    }}
                   >
                     <span>Методические правила и углы</span>
                     <b>↗</b>
@@ -555,7 +575,7 @@ export default function App() {
             </div>
 
             <h4 style={{ margin: '18px 0 8px', color: '#68edff', fontSize: 13, textTransform: 'uppercase', letterSpacing: '.1em' }}>
-              Технические требования кафедры:
+              Технические требования:
             </h4>
             <ul className="technique-list">
               {detailExercise.technique.map((rule, idx) => (
@@ -564,13 +584,13 @@ export default function App() {
             </ul>
 
             <h4 style={{ margin: '18px 0 8px', color: '#68edff', fontSize: 13, textTransform: 'uppercase', letterSpacing: '.1em' }}>
-              Уровни дозировки (МТУСИ):
+              Уровни дозировки:
             </h4>
             <table className="dosage-table">
               <thead>
                 <tr>
                   <th>Уровень подготовки</th>
-                  <th>Норматив кафедры</th>
+                  <th>Норматив</th>
                 </tr>
               </thead>
               <tbody>
@@ -617,9 +637,14 @@ export default function App() {
             <span className="corner corner-bottom-left" />
             <span className="corner corner-bottom-right" />
 
-            {/* LIVE ANGLE AND METRIC HUD */}
-            <div className="live-camera-angle-hint">
-              РАКУРС: {selectedExercise.cameraAngle.toUpperCase()}
+            {/* TOP BAR OVERLAY FOR CAMERA MODE */}
+            <div className="camera-top-actions">
+              <button type="button" className="camera-exit-button" onClick={closeToHome}>
+                ✕ Выход
+              </button>
+              <div className="live-camera-angle-hint">
+                РАКУРС: {selectedExercise.cameraAngle.toUpperCase()}
+              </div>
             </div>
 
             {liveMetric.value !== undefined && (
@@ -676,49 +701,60 @@ export default function App() {
             <div className="exercise-label">
               НОРМАТИВ {selectedExercise.order} / {selectedExercise.shortTitle.toUpperCase()}
             </div>
-            <div className={`rep-display ${motionSignal?.kind ?? ''}`}>
-              <strong key={motionSignal?.id ?? 'counter'}>{repetitions}</strong>
-              <span>/ {selectedExercise.targetReps} {selectedExercise.unitLabel}</span>
-            </div>
-            <div className="progress-track">
-              <span style={{ width: `${Math.min((repetitions / selectedExercise.targetReps) * 100, 100)}%` }} />
-            </div>
-            <p className="attempt-counter">
-              Засчитано: {repetitions} · Замечания техники: {rejectedAttempts}
-            </p>
 
-            <div className="phase-card">
-              <span>СТАТУС БИОМЕХАНИКИ</span>
-              <strong>{feedback}</strong>
-              <p>Требование: {selectedExercise.controlJoints[0] ?? 'Контроль суставов'}</p>
-            </div>
-
-            {view === 'setup' && (
-              <div className="setup-instructions">
-                <span className="step-index">01</span>
-                <div>
-                  <strong>{selectedExercise.cameraAngle}</strong>
-                  <p>Поставьте телефон на расстоянии {selectedExercise.cameraDistance}. После нажатия кнопки у вас будет 6 секунд занять исходное положение.</p>
+            {view === 'setup' ? (
+              <div className="setup-panel-body">
+                <div className="setup-goal-row">
+                  <span>Целевой норматив:</span>
+                  <strong>{selectedExercise.targetReps} {selectedExercise.unitLabel}</strong>
                 </div>
-              </div>
-            )}
 
-            {view === 'setup' && cameraStatus === 'error' && (
-              <button className="secondary-button" type="button" onClick={() => void startCamera()}>
-                Попробовать снова
-              </button>
-            )}
-            {view === 'setup' && cameraStatus !== 'error' && (
-              <button className="primary-button start-button" type="button" disabled={!canStart} onClick={startTestFromSetup}>
-                <span>{canStart ? 'Я готов — отойду к камере' : 'Подключаем камеру'}</span>
-                <b>→</b>
-              </button>
-            )}
-            {view === 'active' && (
-              <p className="active-note">
-                Тест завершится автоматически по выполнению {selectedExercise.targetReps} {selectedExercise.unitLabel}.
-                Ошибки амплитуды и фальстарт бракуются алгоритмом.
-              </p>
+                <div className="setup-instructions">
+                  <span className="step-index">01</span>
+                  <div>
+                    <strong>{selectedExercise.cameraAngle}</strong>
+                    <p>Поставьте телефон на расстоянии {selectedExercise.cameraDistance}. После нажатия кнопки у вас будет 6 секунд занять исходное положение.</p>
+                  </div>
+                </div>
+
+                {cameraStatus === 'error' && (
+                  <button className="secondary-button" type="button" onClick={() => void startCamera()}>
+                    Попробовать снова
+                  </button>
+                )}
+                {cameraStatus !== 'error' && (
+                  <button className="primary-button start-button" type="button" disabled={!canStart} onClick={startTestFromSetup}>
+                    <span>{canStart ? 'Я готов — отойду к камере' : 'Подключаем камеру'}</span>
+                    <b>→</b>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className={`rep-display ${motionSignal?.kind ?? ''}`}>
+                  <strong key={motionSignal?.id ?? 'counter'}>{repetitions}</strong>
+                  <span>/ {selectedExercise.targetReps} {selectedExercise.unitLabel}</span>
+                </div>
+                <div className="progress-track">
+                  <span style={{ width: `${Math.min((repetitions / selectedExercise.targetReps) * 100, 100)}%` }} />
+                </div>
+                <p className="attempt-counter">
+                  Засчитано: {repetitions} · Замечания техники: {rejectedAttempts}
+                </p>
+
+                <div className="phase-card">
+                  <span>СТАТУС БИОМЕХАНИКИ</span>
+                  <strong>{feedback}</strong>
+                  <p>Требование: {selectedExercise.controlJoints[0] ?? 'Контроль суставов'}</p>
+                </div>
+
+                {view === 'active' && (
+                  <p className="active-note">
+                    Тест завершится автоматически по выполнению {selectedExercise.targetReps} {selectedExercise.unitLabel}.
+                    Ошибки амплитуды и фальстарт бракуются алгоритмом.
+                  </p>
+                )}
+              </>
             )}
           </aside>
         </section>
