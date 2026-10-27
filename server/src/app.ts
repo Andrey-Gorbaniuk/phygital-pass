@@ -18,8 +18,8 @@ const participantSchema = z.object({
 
 const submissionSchema = z.object({
   protocolVersion: protocolIdSchema,
-  repetitions: z.literal(10),
-  attempts: z.number().int().min(10).max(99),
+  repetitions: z.number().int().min(1).max(120),
+  attempts: z.number().int().min(1).max(199),
   quality: z.number().int().min(0).max(100),
   tempo: z.number().int().min(0).max(180),
   amplitude: z.enum(['Отличная', 'Достаточная', 'Нужна глубже']),

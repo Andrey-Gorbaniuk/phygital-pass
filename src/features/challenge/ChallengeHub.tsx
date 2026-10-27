@@ -55,7 +55,7 @@ export function ChallengeHub({ onClose }: Props) {
   )
 }
 
-export function ChallengeSubmission({ result }: { result: SubmissionResult }) {
+export function ChallengeSubmission({ result, protocolVersion }: { result: SubmissionResult; protocolVersion?: string }) {
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [alias, setAlias] = useState(() => getStoredParticipant()?.alias ?? '')
@@ -65,15 +65,17 @@ export function ChallengeSubmission({ result }: { result: SubmissionResult }) {
   useEffect(() => {
     void getChallenges()
       .then((items) => {
-        setChallenges(items.filter((challenge) => challenge.protocolVersion === 'squat-v1'))
-        setSelectedId(items.find((challenge) => challenge.protocolVersion === 'squat-v1')?.id ?? '')
+        const matching = protocolVersion ? items.filter((challenge) => challenge.protocolVersion === protocolVersion) : items
+        const available = matching.length ? matching : items
+        setChallenges(available)
+        setSelectedId(available[0]?.id ?? '')
       })
       .catch((reason: unknown) => {
         const text = reason instanceof Error ? reason.message : ''
         setMessage(text.includes('fetch') ? 'Сервис челленджей временно недоступен.' : (text || 'Сервис челленджей недоступен.'))
       })
       .finally(() => setLoading(false))
-  }, [])
+  }, [protocolVersion])
 
   const submit = async () => {
     if (!selectedId || !alias.trim()) return

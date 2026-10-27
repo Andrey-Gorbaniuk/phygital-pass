@@ -5,15 +5,27 @@ import { usePoseCamera } from './features/pose/usePoseCamera'
 import { ChallengeHub, ChallengeSubmission } from './features/challenge/ChallengeHub'
 import { OrganizerConsole } from './features/admin/OrganizerConsole'
 import { downloadResultCard } from './features/share/shareResult'
-import {
-  type CompletedRep,
-  type RejectedRep,
-  type SquatPhase,
-  SquatMachine,
-  TARGET_REPETITIONS,
-} from './features/squat/squatMachine'
+import { EXERCISE_REGISTRY } from './features/exercises/registry'
+import { createExerciseMachine } from './features/exercises/machineFactory'
+import type {
+  ExerciseCategory,
+  ExerciseCompletedRep,
+  ExerciseDefinition,
+  ExercisePhase,
+  ExerciseRejectedRep,
+  IExerciseMachine,
+} from './features/exercises/types'
 
-type View = 'landing' | 'setup' | 'positioning' | 'calibrating' | 'countdown' | 'active' | 'result' | 'challenges' | 'organizer'
+type View =
+  | 'catalog'
+  | 'setup'
+  | 'positioning'
+  | 'calibrating'
+  | 'countdown'
+  | 'active'
+  | 'result'
+  | 'challenges'
+  | 'organizer'
 
 type Tracking = {
   kind: 'waiting' | 'ready' | 'multiple' | 'lost'
@@ -28,6 +40,7 @@ type MotionSignal = {
 
 type TestResult = {
   completedAt: string
+  exerciseTitle: string
   repetitions: number
   attempts: number
   rejectedAttempts: number
@@ -44,15 +57,6 @@ type TestResult = {
 const LAST_RESULT_KEY = 'phygital-pass:last-result'
 const RESULT_HISTORY_KEY = 'phygital-pass:result-history'
 const MAX_LOCAL_RESULTS = 12
-
-const phaseLabels: Record<SquatPhase, string> = {
-  idle: 'Калибровка',
-  standing: 'Готовность',
-  descending: 'Движение',
-  bottom: 'Глубина',
-  ascending: 'Подъём',
-  paused: 'Пауза',
-}
 
 function readLastResult(): TestResult | null {
   try {
@@ -78,80 +82,40 @@ function readResultHistory(): TestResult[] {
   }
 }
 
-function buildResult(repetitions: number, reps: CompletedRep[], rejectedReps: RejectedRep[]): TestResult {
-  const quality = reps.length
-    ? Math.round(reps.reduce((total, rep) => total + rep.qualityScore, 0) / reps.length)
-    : 0
-  const averageDuration = reps.length
-    ? reps.reduce((total, rep) => total + rep.durationMs, 0) / reps.length
-    : 0
-  const averageDepth = reps.length
-    ? reps.reduce((total, rep) => total + rep.minKneeAngle, 0) / reps.length
-    : 180
-  const tempo = averageDuration ? Math.round(60000 / averageDuration) : 0
-  const completion = Math.min(repetitions / TARGET_REPETITIONS, 1) * 100
-  const attempts = repetitions + rejectedReps.length
-  const acceptance = attempts ? (repetitions / attempts) * 100 : 0
-  const shallowRejected = rejectedReps.filter((rep) => rep.reason === 'shallow').length
-  const trackingRejected = rejectedReps.filter((rep) => rep.reason === 'tracking').length
-  const tooFastRejected = rejectedReps.filter((rep) => rep.reason === 'too_fast').length
-  const score = Math.round(completion * 0.3 + quality * 0.45 + acceptance * 0.25)
-  const amplitude = averageDepth <= 98 ? 'Отличная' : averageDepth <= 105 ? 'Достаточная' : 'Нужна глубже'
-  const recommendation =
-    trackingRejected > 0
-      ? 'В следующем тесте держите всё тело в кадре: часть попыток потеряла трекинг.'
-      : shallowRejected > 0 || averageDepth > 101
-      ? 'Сохраняйте ровный темп и опускайтесь чуть глубже.'
-      : tooFastRejected > 0
-        ? 'Сделайте движение спокойнее: быстрые попытки не засчитываются.'
-      : quality >= 80
-        ? 'Отличный контроль движения. Следующий шаг — новый челлендж.'
-        : 'Сделайте движение спокойнее: контроль важнее скорости.'
-
-  return {
-    completedAt: new Date().toISOString(),
-    repetitions,
-    attempts,
-    rejectedAttempts: rejectedReps.length,
-    shallowRejected,
-    trackingRejected,
-    tooFastRejected,
-    score,
-    quality,
-    tempo,
-    amplitude,
-    recommendation,
-  }
-}
-
-function saveResult(result: TestResult): void {
+function speakText(text: string) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
   try {
-    const existingResults = readResultHistory().filter((item) => item.completedAt !== result.completedAt)
-    window.localStorage.setItem(LAST_RESULT_KEY, JSON.stringify(result))
-    window.localStorage.setItem(
-      RESULT_HISTORY_KEY,
-      JSON.stringify([result, ...existingResults].slice(0, MAX_LOCAL_RESULTS)),
-    )
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = 'ru-RU'
+    utterance.rate = 1.05
+    window.speechSynthesis.speak(utterance)
   } catch {
-    // Сохранение результата не должно мешать прохождению теста.
+    // voice feedback is an enhancement
   }
 }
 
 export default function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const machineRef = useRef(new SquatMachine())
-  const viewRef = useRef<View>('landing')
-  const repsRef = useRef<CompletedRep[]>([])
-  const rejectedRepsRef = useRef<RejectedRep[]>([])
-  const [view, setView] = useState<View>('landing')
+  const machineRef = useRef<IExerciseMachine | null>(null)
+  const viewRef = useRef<View>('catalog')
+  const repsRef = useRef<ExerciseCompletedRep[]>([])
+  const rejectedRepsRef = useRef<ExerciseRejectedRep[]>([])
+
+  const [view, setView] = useState<View>('catalog')
+  const [selectedExercise, setSelectedExercise] = useState<ExerciseDefinition>(EXERCISE_REGISTRY[0])
+  const [detailExercise, setDetailExercise] = useState<ExerciseDefinition | null>(null)
+  const [filterCategory, setFilterCategory] = useState<string>('all')
+
   const [countdown, setCountdown] = useState(3)
   const [repetitions, setRepetitions] = useState(0)
   const [rejectedAttempts, setRejectedAttempts] = useState(0)
-  const [phase, setPhase] = useState<SquatPhase>('idle')
-  const [feedback, setFeedback] = useState('Встаньте в полный рост')
+  const [phase, setPhase] = useState<ExercisePhase>('idle')
+  const [feedback, setFeedback] = useState('Примите исходное положение')
   const [tracking, setTracking] = useState<Tracking>({ kind: 'waiting', label: 'Ищем силуэт' })
   const [motionSignal, setMotionSignal] = useState<MotionSignal | null>(null)
+  const [liveMetric, setLiveMetric] = useState<{ label?: string; value?: string | number }>({})
   const [result, setResult] = useState<TestResult | null>(null)
   const [history, setHistory] = useState<TestResult[]>(() => readResultHistory())
   const lastResult = history[0] ?? null
@@ -162,8 +126,7 @@ export default function App() {
 
   useEffect(() => {
     if (!motionSignal || view !== 'active') return
-
-    const timer = window.setTimeout(() => setMotionSignal(null), 1300)
+    const timer = window.setTimeout(() => setMotionSignal(null), 1200)
     return () => window.clearTimeout(timer)
   }, [motionSignal, view])
 
@@ -178,22 +141,23 @@ export default function App() {
         assessment.poseCount > 1
           ? { kind: 'multiple', label: 'В кадре должен быть один человек' }
           : assessment.isVisible
-            ? { kind: 'ready', label: 'Тело распознано. Можно начинать' }
-            : { kind: 'lost', label: 'Покажите в кадре плечо, таз, колено и стопу' }
+          ? { kind: 'ready', label: 'Тело распознано. Можно выполнять' }
+          : { kind: 'lost', label: 'Покажите ключевые суставы в кадре' }
       updateTracking(nextTracking)
 
-      if (viewRef.current !== 'active') return
+      if (viewRef.current !== 'active' || !machineRef.current) return
 
       const snapshot = machineRef.current.process({
         timestamp,
         isVisible: assessment.isVisible && assessment.poseCount === 1,
-        kneeAngle: assessment.kneeAngle,
+        assessment,
       })
 
       setPhase((current) => (current === snapshot.phase ? current : snapshot.phase))
       setFeedback((current) => (current === snapshot.feedback ? current : snapshot.feedback))
       setRepetitions((current) => (current === snapshot.repetitions ? current : snapshot.repetitions))
       setRejectedAttempts((current) => (current === snapshot.rejectedAttempts ? current : snapshot.rejectedAttempts))
+      setLiveMetric({ label: snapshot.liveMetricLabel, value: snapshot.liveMetricValue })
 
       if (snapshot.lastRejected) {
         rejectedRepsRef.current = [...rejectedRepsRef.current, snapshot.lastRejected]
@@ -206,20 +170,66 @@ export default function App() {
 
       if (!snapshot.lastRep) return
 
-      setMotionSignal({ id: timestamp, kind: 'accepted', message: 'Повтор засчитан' })
-      if ('vibrate' in navigator) navigator.vibrate(18)
+      setMotionSignal({ id: timestamp, kind: 'accepted', message: `Засчитано: ${snapshot.repetitions}` })
+      speakText(`${snapshot.repetitions}`)
+      if ('vibrate' in navigator) navigator.vibrate(20)
 
       const allReps = [...repsRef.current, snapshot.lastRep]
       repsRef.current = allReps
-      if (snapshot.repetitions < TARGET_REPETITIONS) return
 
-      const completed = buildResult(snapshot.repetitions, allReps, rejectedRepsRef.current)
-      saveResult(completed)
-      setHistory((existing) => [completed, ...existing.filter((item) => item.completedAt !== completed.completedAt)].slice(0, MAX_LOCAL_RESULTS))
-      setResult(completed)
+      if (snapshot.repetitions < selectedExercise.targetReps) return
+
+      // Completed target reps!
+      const totalDuration = allReps.reduce((sum, r) => sum + r.durationMs, 0)
+      const averageDuration = allReps.length ? totalDuration / allReps.length : 1500
+      const tempo = Math.round(60000 / averageDuration)
+      const quality = Math.round(allReps.reduce((sum, r) => sum + r.qualityScore, 0) / allReps.length)
+      const attempts = snapshot.repetitions + rejectedRepsRef.current.length
+      const acceptance = attempts ? (snapshot.repetitions / attempts) * 100 : 100
+      const score = Math.round(quality * 0.6 + acceptance * 0.4)
+
+      const shallowCount = rejectedRepsRef.current.filter((r) => r.reason === 'shallow').length
+      const trackingCount = rejectedRepsRef.current.filter((r) => r.reason === 'tracking').length
+      const tooFastCount = rejectedRepsRef.current.filter((r) => r.reason === 'too_fast').length
+
+      const completedResult: TestResult = {
+        completedAt: new Date().toISOString(),
+        exerciseTitle: selectedExercise.title,
+        repetitions: snapshot.repetitions,
+        attempts,
+        rejectedAttempts: rejectedRepsRef.current.length,
+        shallowRejected: shallowCount,
+        trackingRejected: trackingCount,
+        tooFastRejected: tooFastCount,
+        score,
+        quality,
+        tempo,
+        amplitude: quality >= 85 ? 'Отличная' : quality >= 70 ? 'Достаточная' : 'Нужна глубже',
+        recommendation:
+          shallowCount > 0
+            ? 'Следите за полнотой амплитуды и дожимайте в пиковой фазе.'
+            : tooFastCount > 0
+            ? 'Соблюдайте темп: резкие повторы скрадывают технику.'
+            : 'Отличная фиксация суставов. Норматив сдан на высокий балл!',
+      }
+
+      try {
+        const existingResults = readResultHistory().filter((item) => item.completedAt !== completedResult.completedAt)
+        window.localStorage.setItem(LAST_RESULT_KEY, JSON.stringify(completedResult))
+        window.localStorage.setItem(
+          RESULT_HISTORY_KEY,
+          JSON.stringify([completedResult, ...existingResults].slice(0, MAX_LOCAL_RESULTS)),
+        )
+      } catch {
+        // local storage fallback
+      }
+
+      setHistory((existing) => [completedResult, ...existing.filter((i) => i.completedAt !== completedResult.completedAt)].slice(0, MAX_LOCAL_RESULTS))
+      setResult(completedResult)
       setView('result')
+      speakText('Норматив выполнен!')
     },
-    [updateTracking],
+    [selectedExercise, updateTracking],
   )
 
   const { error, startCamera, status: cameraStatus, stopCamera } = usePoseCamera({
@@ -232,6 +242,7 @@ export default function App() {
     if (view === 'result') stopCamera()
   }, [stopCamera, view])
 
+  // Positioning countdown (7s to get into frame)
   useEffect(() => {
     if (view !== 'positioning') return
 
@@ -249,6 +260,7 @@ export default function App() {
     return () => window.clearInterval(timer)
   }, [view])
 
+  // Calibration transition once ready
   useEffect(() => {
     if (view !== 'calibrating' || tracking.kind !== 'ready') return
 
@@ -256,11 +268,13 @@ export default function App() {
       if (viewRef.current !== 'calibrating') return
       setCountdown(3)
       setView('countdown')
-    }, 900)
+      speakText('Приготовиться. Три, два, один')
+    }, 850)
 
     return () => window.clearTimeout(timer)
   }, [tracking.kind, view])
 
+  // 3-2-1 Countdown before active workout
   useEffect(() => {
     if (view !== 'countdown') return
 
@@ -268,14 +282,16 @@ export default function App() {
       setCountdown((current) => {
         if (current <= 1) {
           window.clearInterval(timer)
+          machineRef.current = createExerciseMachine(selectedExercise.id, selectedExercise.targetReps)
           machineRef.current.reset()
           repsRef.current = []
           rejectedRepsRef.current = []
           setRepetitions(0)
           setRejectedAttempts(0)
-          setPhase('standing')
-          setFeedback('Готово. Начинайте приседание')
+          setPhase('ready')
+          setFeedback('Начинайте выполнение')
           setView('active')
+          speakText('Старт!')
           return 0
         }
         return current - 1
@@ -283,34 +299,36 @@ export default function App() {
     }, 1000)
 
     return () => window.clearInterval(timer)
-  }, [view])
+  }, [selectedExercise, view])
 
-  const openCamera = () => {
+  const startExercise = (exercise: ExerciseDefinition) => {
+    setSelectedExercise(exercise)
     setMotionSignal(null)
     setResult(null)
+    machineRef.current = createExerciseMachine(exercise.id, exercise.targetReps)
     setView('setup')
     void startCamera()
   }
 
-  const startTest = () => {
+  const startTestFromSetup = () => {
     if (cameraStatus !== 'ready') return
-    setCountdown(7)
+    setCountdown(6)
     setView('positioning')
   }
 
-  const closeTest = () => {
+  const closeToHome = () => {
     stopCamera()
-    setView('landing')
+    setView('catalog')
   }
 
-  const newTest = () => {
-    machineRef.current.reset()
+  const restartCurrentTest = () => {
+    if (machineRef.current) machineRef.current.reset()
     repsRef.current = []
     rejectedRepsRef.current = []
     setRepetitions(0)
     setRejectedAttempts(0)
     setPhase('idle')
-    setFeedback('Встаньте в полный рост')
+    setFeedback('Примите исходное положение')
     setMotionSignal(null)
     setResult(null)
     setView('setup')
@@ -319,71 +337,259 @@ export default function App() {
 
   const canStart = cameraStatus === 'ready'
 
+  // Filter exercises
+  const filteredExercises = EXERCISE_REGISTRY.filter((item) => {
+    if (filterCategory === 'interactive') return item.isInteractive
+    if (filterCategory === 'all') return true
+    return item.category === filterCategory
+  })
+
   return (
     <main className="app-shell">
       <div className="ambient ambient-one" />
       <div className="ambient ambient-two" />
       <div className="grid-overlay" />
+
       <header className="topbar">
-        <button className="brand" type="button" onClick={closeTest} aria-label="На главный экран">
+        <button className="brand" type="button" onClick={closeToHome} aria-label="На главную">
           <span className="brand-mark"><i /><i /><i /></span>
           <span>PHYGITAL <b>PASS</b></span>
         </button>
-        <div className="topbar-links"><button type="button" onClick={() => { stopCamera(); setView('challenges') }}>Челленджи</button><button type="button" onClick={() => { stopCamera(); setView('organizer') }}>Организатор</button><span className="topbar-note">MOTION INTELLIGENCE / 01</span></div>
+        <div className="topbar-links">
+          <button type="button" onClick={() => { stopCamera(); setView('catalog') }}>Нормативы</button>
+          <button type="button" onClick={() => { stopCamera(); setView('challenges') }}>Челленджи</button>
+          <button type="button" onClick={() => { stopCamera(); setView('organizer') }}>Организатор</button>
+          <span className="topbar-note">МТУСИ / КАФЕДРА ФИЗВОСПИТАНИЯ</span>
+        </div>
       </header>
 
-      {view === 'landing' && (
-        <section className="landing screen-enter">
-          <div className="hero-visual" aria-hidden="true">
-            <div className="hero-orbit orbit-large" />
-            <div className="hero-orbit orbit-medium" />
-            <div className="hero-orbit orbit-small" />
-            <div className="hero-core"><i /><i /><i /></div>
-            <span className="hud-tag tag-one">POSE_33</span>
-            <span className="hud-tag tag-two">LIVE</span>
-            <span className="hud-tag tag-three">MOTION / 01</span>
+      {/* VIEW: CATALOG OF 12 STANDARDS (DEFAULT HOME) */}
+      {view === 'catalog' && (
+        <section className="catalog-screen screen-enter">
+          <div className="catalog-header">
+            <span className="dept-badge">
+              <span className="pulse-dot" /> МТУСИ • КАФЕДРА ФИЗИЧЕСКОГО ВОСПИТАНИЯ
+            </span>
+            <h1>Комплекс <em>12 нормативов</em></h1>
+            <p>
+              Официальный методический комплекс упражнений ОФП кафедры физвоспитания МТУСИ.
+              Интерактивные нормативы проверяются в реальном времени с камеры смартфона с помощью нейросетевого зрения (MediaPipe).
+            </p>
           </div>
-          <div className="eyebrow"><span className="pulse-dot" /> CAMPUS MOTION SCAN</div>
-          <h1>Твой спорт.<br /><em>Твой цифровой след.</em></h1>
-          <p className="hero-copy">
-            Пройди короткий тест по камере и получи фиджитал-паспорт движения.
-            Никаких датчиков, регистрации и отправки видео.
-          </p>
-          <div className="hero-actions">
-            <button className="primary-button" type="button" onClick={openCamera}>
-              <span>Начать сканирование</span><b>→</b>
-            </button>
-            <span className="privacy-note">Видео обрабатывается только на устройстве</span>
+
+          <div className="catalog-nav-row">
+            <div className="category-filters">
+              <button
+                type="button"
+                className={`filter-pill ${filterCategory === 'all' ? 'active' : ''}`}
+                onClick={() => setFilterCategory('all')}
+              >
+                Все нормативы (12)
+              </button>
+              <button
+                type="button"
+                className={`filter-pill ${filterCategory === 'interactive' ? 'active' : ''}`}
+                onClick={() => setFilterCategory('interactive')}
+              >
+                ● Доступны онлайн (5)
+              </button>
+              <button
+                type="button"
+                className={`filter-pill ${filterCategory === 'Силовая выносливость' ? 'active' : ''}`}
+                onClick={() => setFilterCategory('Силовая выносливость')}
+              >
+                Силовые
+              </button>
+              <button
+                type="button"
+                className={`filter-pill ${filterCategory === 'Мышцы кора и пресса' ? 'active' : ''}`}
+                onClick={() => setFilterCategory('Мышцы кора и пресса')}
+              >
+                Мышцы кора
+              </button>
+              <button
+                type="button"
+                className={`filter-pill ${filterCategory === 'Функциональный тренинг' ? 'active' : ''}`}
+                onClick={() => setFilterCategory('Функциональный тренинг')}
+              >
+                Функциональные
+              </button>
+            </div>
+
+            <div className="catalog-actions-right">
+              <button className="landing-challenge-link" type="button" onClick={() => setView('challenges')}>
+                Рейтинг факультетов МТУСИ <b>↗</b>
+              </button>
+            </div>
           </div>
-          <button className="landing-challenge-link" type="button" onClick={() => setView('challenges')}>Открыть активные челленджи <b>↗</b></button>
-          <div className="hero-stats">
-            <Stat label="Тест" value="10" suffix=" повторов" />
-            <Stat label="Режим" value="LIVE" suffix=" анализ" />
-            <Stat label="Данные" value="0" suffix=" видео" />
-          </div>
+
           {lastResult && (
-            <div className="last-result">
-              <span>Последний результат на этом устройстве</span>
+            <div className="last-result" style={{ marginBottom: 25 }}>
+              <span>Последний сданный норматив на устройстве</span>
               <strong>{lastResult.score} <small>PHYGITAL SCORE</small></strong>
-              <p>{lastResult.repetitions}/{lastResult.attempts ?? TARGET_REPETITIONS} засчитано / попытки · {lastResult.tempo} повторов/мин · {history.length} сохранено на устройстве</p>
+              <p>
+                {lastResult.exerciseTitle} · {lastResult.repetitions} {lastResult.repetitions === 1 ? 'повтор' : 'повторов'} · качество {lastResult.quality}% · Сохранено локально
+              </p>
             </div>
           )}
+
+          <div className="exercises-grid">
+            {filteredExercises.map((exercise) => (
+              <article
+                key={exercise.id}
+                className={`exercise-card ${exercise.isInteractive ? 'interactive' : 'spec'}`}
+              >
+                <div className="card-top">
+                  <span className="card-order">№ {exercise.order < 10 ? `0${exercise.order}` : exercise.order}</span>
+                  <span className={`card-badge ${exercise.isInteractive ? 'interactive' : 'spec'}`}>
+                    {exercise.isInteractive ? '● ИНТЕРАКТИВНЫЙ ИИ-ТЕСТ' : 'НОРМАТИВ КАФЕДРЫ'}
+                  </span>
+                </div>
+
+                <h3>{exercise.title}</h3>
+                <p>{exercise.description}</p>
+
+                <div className="card-specs">
+                  <div className="spec-item">
+                    <span>Ракурс камеры</span>
+                    <strong>{exercise.cameraAngle}</strong>
+                  </div>
+                  <div className="spec-item">
+                    <span>Норма теста</span>
+                    <strong>{exercise.targetReps} {exercise.unitLabel}</strong>
+                  </div>
+                </div>
+
+                <div className="card-dosage-preview">
+                  <strong>Дозировка:</strong> {exercise.dosage.basic}
+                </div>
+
+                {exercise.isInteractive ? (
+                  <button
+                    className="card-btn start-interactive"
+                    type="button"
+                    onClick={() => startExercise(exercise)}
+                  >
+                    <span>Сдать норматив на камеру</span>
+                    <b>→</b>
+                  </button>
+                ) : (
+                  <button
+                    className="card-btn view-spec"
+                    type="button"
+                    onClick={() => setDetailExercise(exercise)}
+                  >
+                    <span>Методические правила и углы</span>
+                    <b>↗</b>
+                  </button>
+                )}
+              </article>
+            ))}
+          </div>
         </section>
       )}
 
-      {view === 'challenges' && <ChallengeHub onClose={closeTest} />}
-      {view === 'organizer' && <OrganizerConsole onClose={closeTest} />}
+      {/* DETAIL MODAL FOR SPECIFICATION / DOSAGE DETAILS */}
+      {detailExercise && (
+        <div className="modal-overlay" onClick={() => setDetailExercise(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" type="button" onClick={() => setDetailExercise(null)}>
+              ×
+            </button>
 
+            <div className="modal-head">
+              <span className="dept-badge">МЕТОДИЧЕСКИЙ НОРМАТИВ № {detailExercise.order}</span>
+              <h2>{detailExercise.title}</h2>
+              <p style={{ color: 'rgba(215, 239, 250, .72)' }}>{detailExercise.description}</p>
+            </div>
+
+            <div className="modal-grid">
+              <div className="modal-box">
+                <span>Требуемый ракурс камеры</span>
+                <strong>{detailExercise.cameraAngle}</strong>
+                <p style={{ fontSize: 11, color: '#8be9fd' }}>Дистанция: {detailExercise.cameraDistance}</p>
+              </div>
+              <div className="modal-box">
+                <span>Плоскость движения</span>
+                <strong>{detailExercise.bodyPlane}</strong>
+                <p style={{ fontSize: 11, color: '#8be9fd' }}>Контрольные суставы: {detailExercise.controlJoints.join(', ')}</p>
+              </div>
+            </div>
+
+            <h4 style={{ margin: '18px 0 8px', color: '#68edff', fontSize: 13, textTransform: 'uppercase', letterSpacing: '.1em' }}>
+              Технические требования кафедры:
+            </h4>
+            <ul className="technique-list">
+              {detailExercise.technique.map((rule, idx) => (
+                <li key={idx}>{rule}</li>
+              ))}
+            </ul>
+
+            <h4 style={{ margin: '18px 0 8px', color: '#68edff', fontSize: 13, textTransform: 'uppercase', letterSpacing: '.1em' }}>
+              Уровни дозировки (МТУСИ):
+            </h4>
+            <table className="dosage-table">
+              <thead>
+                <tr>
+                  <th>Уровень подготовки</th>
+                  <th>Норматив кафедры</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Начальный уровень</strong></td>
+                  <td>{detailExercise.dosage.initial}</td>
+                </tr>
+                <tr>
+                  <td><strong>Базовый уровень</strong></td>
+                  <td>{detailExercise.dosage.basic}</td>
+                </tr>
+                <tr>
+                  <td><strong>Максимальный уровень</strong></td>
+                  <td>{detailExercise.dosage.max}</td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div className="modal-footer">
+              <button className="secondary-button" type="button" onClick={() => setDetailExercise(null)}>
+                Понятно, закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW: CHALLENGES */}
+      {view === 'challenges' && <ChallengeHub onClose={closeToHome} />}
+
+      {/* VIEW: ORGANIZER */}
+      {view === 'organizer' && <OrganizerConsole onClose={closeToHome} />}
+
+      {/* VIEW: TEST & ACTIVE CAMERA SCREEN */}
       {(view === 'setup' || view === 'positioning' || view === 'calibrating' || view === 'countdown' || view === 'active') && (
         <section className="test-screen screen-enter">
           <div className="camera-stage">
             <video ref={videoRef} className="camera-feed" muted playsInline />
             <canvas ref={canvasRef} className="pose-canvas" />
             <div className="camera-vignette" />
+
             <span className="corner corner-top-left" />
             <span className="corner corner-top-right" />
             <span className="corner corner-bottom-left" />
             <span className="corner corner-bottom-right" />
+
+            {/* LIVE ANGLE AND METRIC HUD */}
+            <div className="live-camera-angle-hint">
+              РАКУРС: {selectedExercise.cameraAngle.toUpperCase()}
+            </div>
+
+            {liveMetric.value !== undefined && (
+              <div className="live-metric-pill">
+                {liveMetric.label}: {liveMetric.value}
+              </div>
+            )}
+
             {(view === 'setup' || view === 'positioning' || view === 'calibrating') && (
               <div className={`body-guide ${tracking.kind}`} aria-hidden="true">
                 <i className="guide-head" />
@@ -392,65 +598,108 @@ export default function App() {
                 <i className="guide-arm guide-arm-right" />
                 <i className="guide-leg guide-leg-left" />
                 <i className="guide-leg guide-leg-right" />
-                <span>ВЕСЬ РОСТ В КАДРЕ</span>
+                <span>ВЕСЬ СИЛУЭТ В КАДРЕ</span>
               </div>
             )}
 
             <div className="scan-line" />
-            {cameraStatus === 'loading' && <div className="camera-message"><LoadingMark /> Подключаем камеру и модель движения…</div>}
+            {cameraStatus === 'loading' && <div className="camera-message"><LoadingMark /> Подключаем камеру и модель MediaPipe…</div>}
             {cameraStatus === 'error' && <div className="camera-message error-message">{error ?? 'Не удалось запустить камеру.'}</div>}
-            {view === 'positioning' && <div className="camera-transition"><span>ОТОЙДИТЕ К КАМЕРЕ</span><strong>{countdown}</strong><p>Встаньте в полный рост. Тест запустится сам.</p></div>}
-            {view === 'calibrating' && <div className="camera-transition camera-transition-ready"><span>КАЛИБРОВКА</span><strong>⌁</strong><p>{tracking.kind === 'ready' ? 'Силуэт найден. Готовим старт…' : 'Покажите плечо, таз, колени и стопы.'}</p></div>}
+            {view === 'positioning' && (
+              <div className="camera-transition">
+                <span>ОТОЙДИТЕ К КАМЕРЕ</span>
+                <strong>{countdown}</strong>
+                <p>Установите телефон на уровне {selectedExercise.cameraDistance}. Встаньте в кадр.</p>
+              </div>
+            )}
+            {view === 'calibrating' && (
+              <div className="camera-transition camera-transition-ready">
+                <span>КАЛИБРОВКА УГЛОВ</span>
+                <strong>⌁</strong>
+                <p>{tracking.kind === 'ready' ? 'Суставы распознаны. Готовим старт…' : 'Покажите тело целиком в ракурсе сбоку.'}</p>
+              </div>
+            )}
             {view === 'countdown' && <div className="countdown">{countdown}</div>}
-            {view === 'active' && <div className={`live-feedback ${motionSignal?.kind ?? ''}`} aria-live="polite">{motionSignal?.message ?? feedback}</div>}
+            {view === 'active' && (
+              <div className={`live-feedback ${motionSignal?.kind ?? ''}`} aria-live="polite">
+                {motionSignal?.message ?? feedback}
+              </div>
+            )}
           </div>
 
           <aside className="test-panel">
             <div className="test-panel-head">
-              <span className={`status-pill ${tracking.kind}`}><i /> {cameraStatus === 'loading' ? 'Подключение' : tracking.label}</span>
-              <button type="button" className="quiet-button" onClick={closeTest}>Закрыть</button>
+              <span className={`status-pill ${tracking.kind}`}>
+                <i /> {cameraStatus === 'loading' ? 'Подключение' : tracking.label}
+              </span>
+              <button type="button" className="quiet-button" onClick={closeToHome}>Закрыть</button>
             </div>
 
-            <div className="exercise-label">ТЕСТ 01 / ПРИСЕДАНИЯ</div>
-            <div className={`rep-display ${motionSignal?.kind ?? ''}`}><strong key={motionSignal?.id ?? 'counter'}>{repetitions}</strong><span>/ {TARGET_REPETITIONS}</span></div>
-            <div className="progress-track"><span style={{ width: `${(repetitions / TARGET_REPETITIONS) * 100}%` }} /></div>
-            <p className="attempt-counter">Засчитано: {repetitions} · Не засчитано: {rejectedAttempts}</p>
+            <div className="exercise-label">
+              НОРМАТИВ {selectedExercise.order} / {selectedExercise.shortTitle.toUpperCase()}
+            </div>
+            <div className={`rep-display ${motionSignal?.kind ?? ''}`}>
+              <strong key={motionSignal?.id ?? 'counter'}>{repetitions}</strong>
+              <span>/ {selectedExercise.targetReps} {selectedExercise.unitLabel}</span>
+            </div>
+            <div className="progress-track">
+              <span style={{ width: `${Math.min((repetitions / selectedExercise.targetReps) * 100, 100)}%` }} />
+            </div>
+            <p className="attempt-counter">
+              Засчитано: {repetitions} · Замечания техники: {rejectedAttempts}
+            </p>
 
             <div className="phase-card">
-              <span>СТАТУС ДВИЖЕНИЯ</span>
-              <strong>{phaseLabels[phase]}</strong>
-              <p>{feedback}</p>
+              <span>СТАТУС БИОМЕХАНИКИ</span>
+              <strong>{feedback}</strong>
+              <p>Требование: {selectedExercise.controlJoints[0] ?? 'Контроль суставов'}</p>
             </div>
 
             {view === 'setup' && (
               <div className="setup-instructions">
                 <span className="step-index">01</span>
-                <div><strong>Сначала нажмите кнопку, потом отойдите</strong><p>У вас будет 7 секунд, чтобы встать целиком в кадр. Когда камера найдёт силуэт, обратный отсчёт начнётся автоматически.</p></div>
+                <div>
+                  <strong>{selectedExercise.cameraAngle}</strong>
+                  <p>Поставьте телефон на расстоянии {selectedExercise.cameraDistance}. После нажатия кнопки у вас будет 6 секунд занять исходное положение.</p>
+                </div>
               </div>
             )}
 
             {view === 'setup' && cameraStatus === 'error' && (
-              <button className="secondary-button" type="button" onClick={() => void startCamera()}>Попробовать снова</button>
-            )}
-            {view === 'setup' && cameraStatus !== 'error' && (
-              <button className="primary-button start-button" type="button" disabled={!canStart} onClick={startTest}>
-                <span>{canStart ? 'Я готов — отойду к камере' : 'Подключаем камеру'}</span><b>→</b>
+              <button className="secondary-button" type="button" onClick={() => void startCamera()}>
+                Попробовать снова
               </button>
             )}
-            {view === 'active' && <p className="active-note">Тест завершится после 10 засчитанных повторов. Недостаточно глубокие, слишком быстрые попытки и потеря трекинга не входят в результат.</p>}
+            {view === 'setup' && cameraStatus !== 'error' && (
+              <button className="primary-button start-button" type="button" disabled={!canStart} onClick={startTestFromSetup}>
+                <span>{canStart ? 'Я готов — отойду к камере' : 'Подключаем камеру'}</span>
+                <b>→</b>
+              </button>
+            )}
+            {view === 'active' && (
+              <p className="active-note">
+                Тест завершится автоматически по выполнению {selectedExercise.targetReps} {selectedExercise.unitLabel}.
+                Ошибки амплитуды и фальстарт бракуются алгоритмом.
+              </p>
+            )}
           </aside>
         </section>
       )}
 
+      {/* VIEW: RESULT SCREEN */}
       {view === 'result' && result && (
         <section className="result-screen screen-enter">
           <div className="result-header">
-            <div className="eyebrow"><span className="pulse-dot" /> TEST COMPLETED</div>
-            <h1>Твой фиджитал-<em>паспорт</em></h1>
-            <p>Результат этого теста сохранён только в браузере на устройстве.</p>
+            <div className="eyebrow"><span className="pulse-dot" /> СТАНДАРТ КАФЕДРЫ МТУСИ ВЫПОЛНЕН</div>
+            <h1>Норматив <em>зачтён</em></h1>
+            <p>Результат биомеханического анализа {result.exerciseTitle} сохранён в фиджитал-паспорт.</p>
           </div>
+
           <div className="passport-card">
-            <div className="passport-top"><span>PHYGITAL PASS / MOTION PROFILE</span><span>TEST 01</span></div>
+            <div className="passport-top">
+              <span>PHYGITAL PASS / MTUCI PE DEPT</span>
+              <span>{selectedExercise.shortTitle.toUpperCase()}</span>
+            </div>
             <div className="score-block">
               <span>PHYGITAL SCORE</span>
               <strong>{result.score}</strong><small>/ 100</small>
@@ -458,28 +707,45 @@ export default function App() {
             </div>
             <div className="passport-metrics">
               <Metric value={`${result.repetitions}/${result.attempts}`} label="засчитано / попытки" />
-              <Metric value={`${result.quality}%`} label="качество теста" />
-              <Metric value={`${result.tempo}`} label="повторов в минуту" />
+              <Metric value={`${result.quality}%`} label="качество техники" />
+              <Metric value={`${result.tempo}`} label="темп движения" />
               <Metric value={result.amplitude} label="амплитуда" />
             </div>
-            <ScoreBreakdown result={result} />
+
             <div className="audit-line">
-              <span>ПРОЗРАЧНОСТЬ ТЕСТА</span>
-              <p>{result.rejectedAttempts === 0 ? 'Все начатые попытки были засчитаны.' : `Не засчитано: ${result.shallowRejected} из-за глубины, ${result.tooFastRejected} из-за темпа, ${result.trackingRejected} из-за трекинга.`}</p>
+              <span>ПРОЗРАЧНОСТЬ ОЦЕНКИ</span>
+              <p>
+                {result.rejectedAttempts === 0
+                  ? 'Все зафиксированные попытки выполнены по методическому регламенту кафедры.'
+                  : `Замечания: ${result.shallowRejected} по глубине сгиба, ${result.tooFastRejected} по темпу, ${result.trackingRejected} по видимости суставов.`}
+              </p>
             </div>
-            <div className="recommendation"><span>СЛЕДУЮЩИЙ ШАГ</span><p>{result.recommendation}</p></div>
-            <div className="passport-bottom"><span>AI-ASSISTED MOTION TEST</span><span>LOCAL PROCESSING</span></div>
+
+            <div className="recommendation">
+              <span>ЗАКЛЮЧЕНИЕ СИСТЕМЫ</span>
+              <p>{result.recommendation}</p>
+            </div>
+            <div className="passport-bottom">
+              <span>ИИ-ПРОТОКОЛ: {selectedExercise.protocolId ?? 'CUSTOM-V1'}</span>
+              <span>МТУСИ ЭЛЕКТИВНАЯ ФИЗКУЛЬТУРА</span>
+            </div>
           </div>
-          <ProgressCard
-            current={result}
-            previous={history.find((item) => item.completedAt !== result.completedAt) ?? null}
-            history={history}
+
+          <ChallengeSubmission
+            result={result}
+            protocolVersion={selectedExercise.protocolId}
           />
-          <ChallengeSubmission result={result} />
+
           <div className="result-actions">
-            <button className="primary-button" type="button" onClick={newTest}><span>Пройти ещё раз</span><b>↻</b></button>
-            <button className="text-button" type="button" onClick={() => downloadResultCard(result)}>Скачать карточку</button>
-            <button className="text-button" type="button" onClick={closeTest}>На главный экран</button>
+            <button className="primary-button" type="button" onClick={restartCurrentTest}>
+              <span>Сдать ещё раз</span><b>↻</b>
+            </button>
+            <button className="text-button" type="button" onClick={() => downloadResultCard(result)}>
+              Скачать карточку результата
+            </button>
+            <button className="text-button" type="button" onClick={closeToHome}>
+              В каталог 12 нормативов
+            </button>
           </div>
         </section>
       )}
@@ -487,75 +753,8 @@ export default function App() {
   )
 }
 
-function Stat({ label, value, suffix }: { label: string; value: string; suffix: string }) {
-  return <div><span>{label}</span><strong>{value}<small>{suffix}</small></strong></div>
-}
-
 function Metric({ value, label }: { value: string; label: string }) {
   return <div><strong>{value}</strong><span>{label}</span></div>
-}
-
-function ScoreBreakdown({ result }: { result: TestResult }) {
-  const completion = Math.round(Math.min(result.repetitions / TARGET_REPETITIONS, 1) * 100)
-  const acceptance = Math.round((result.repetitions / result.attempts) * 100)
-  const parts = [
-    { label: 'завершение', value: completion, weight: 30 },
-    { label: 'качество', value: result.quality, weight: 45 },
-    { label: 'доля зачёта', value: acceptance, weight: 25 },
-  ]
-
-  return (
-    <section className="score-breakdown" aria-label="Как рассчитан итоговый балл">
-      <div><span>СОСТАВ БАЛЛА</span><small>Итог — взвешенная сумма трёх показателей</small></div>
-      <div className="score-breakdown-bars">
-        {parts.map((part) => (
-          <div key={part.label}>
-            <div><span>{part.label}</span><strong>{part.value}% <small>вес {part.weight}%</small></strong></div>
-            <i><b style={{ width: `${part.value}%` }} /></i>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function ProgressCard({ current, previous, history }: { current: TestResult; previous: TestResult | null; history: TestResult[] }) {
-  const acceptance = Math.round((current.repetitions / current.attempts) * 100)
-  const scoreChange = previous ? current.score - previous.score : null
-
-  return (
-    <section className="progress-card" aria-label="Динамика результатов">
-      <div className="progress-card-head">
-        <div><span>ДИНАМИКА</span><h2>Траектория на устройстве</h2></div>
-        <small>{history.length} сохранено локально</small>
-      </div>
-      <div className="progress-summary">
-        <div><span>ДОЛЯ ЗАСЧЁТА</span><strong>{acceptance}%</strong><p>{current.repetitions} из {current.attempts} начатых попыток</p></div>
-        <div><span>{previous ? 'К ПРЕДЫДУЩЕМУ ТЕСТУ' : 'БАЗОВАЯ ТОЧКА'}</span><strong className={scoreChange !== null && scoreChange < 0 ? 'score-down' : 'score-up'}>{scoreChange === null ? '—' : `${scoreChange > 0 ? '+' : ''}${scoreChange}`}</strong><p>{previous ? 'изменение Phygital Score' : 'следующий тест покажет динамику'}</p></div>
-      </div>
-      <div className="history-list">
-        {history.slice(0, 3).map((item) => {
-          const isCurrent = item.completedAt === current.completedAt
-          return (
-            <div className={`history-item${isCurrent ? ' current-history-item' : ''}`} key={item.completedAt}>
-              <span>{isCurrent ? 'ЭТОТ ТЕСТ' : formatResultDate(item.completedAt)}</span>
-              <strong>{item.score}</strong>
-              <small>{item.repetitions}/{item.attempts} засчитано</small>
-            </div>
-          )
-        })}
-      </div>
-    </section>
-  )
-}
-
-function formatResultDate(timestamp: string): string {
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) return 'РАНЕЕ'
-
-  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-    .format(date)
-    .replace('.', '')
 }
 
 function LoadingMark() {
