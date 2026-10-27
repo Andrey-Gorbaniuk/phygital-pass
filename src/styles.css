@@ -10,10 +10,20 @@
 
 html {
   overflow-x: hidden;
-  overflow-y: scroll;
+  overflow-y: auto;
 }
 
-body { margin: 0; min-width: 320px; min-height: 100vh; min-height: 100dvh; overflow-x: hidden; background: #070b16; }
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #070b16;
+}
+
+body.modal-open {
+  overflow: hidden;
+}
 button { font: inherit; touch-action: manipulation; }
 button:focus-visible { outline: 2px solid #71f2ff; outline-offset: 4px; }
 
@@ -373,11 +383,13 @@ h1 em { color: #5eeeff; font-style: normal; text-shadow: 0 0 35px rgba(94, 238, 
   display: grid;
   place-items: center;
   padding: 20px;
+  overscroll-behavior: contain;
 }
 .modal-content {
   width: min(720px, 100%);
   max-height: 90vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: linear-gradient(145deg, #0f243b, #091426);
   border: 1px solid rgba(115, 235, 255, .32);
   box-shadow: 0 25px 70px rgba(0, 0, 0, .6), 0 0 35px rgba(88, 234, 255, .15);

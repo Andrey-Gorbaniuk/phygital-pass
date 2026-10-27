@@ -108,6 +108,15 @@ export default function App() {
   const [detailExercise, setDetailExercise] = useState<ExerciseDefinition | null>(null)
   const [filterCategory, setFilterCategory] = useState<string>('all')
 
+  useEffect(() => {
+    if (detailExercise) {
+      document.body.classList.add('modal-open')
+      return () => {
+        document.body.classList.remove('modal-open')
+      }
+    }
+  }, [detailExercise])
+
   const [countdown, setCountdown] = useState(3)
   const [repetitions, setRepetitions] = useState(0)
   const [rejectedAttempts, setRejectedAttempts] = useState(0)
@@ -385,9 +394,6 @@ export default function App() {
       {view === 'catalog' && (
         <section className="catalog-screen screen-enter">
           <div className="catalog-header">
-            <span className="dept-badge">
-              МТУСИ • КАФЕДРА ФИЗИЧЕСКОГО ВОСПИТАНИЯ
-            </span>
             <h1>Комплекс <em>нормативов</em></h1>
             <p>
               Методический комплекс упражнений ОФП кафедры физвоспитания МТУСИ. Интерактивные нормативы проверяются в реальном времени с камеры смартфона с помощью нейросетевого зрения.
