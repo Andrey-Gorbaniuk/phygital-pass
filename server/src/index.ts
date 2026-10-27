@@ -10,6 +10,7 @@ const app = createApp(database, config)
 
 app.use('/assets/*', serveStatic({ root: './public' }))
 app.use('/models/*', serveStatic({ root: './public' }))
+app.use('/exercises/*', serveStatic({ root: './public' }))
 app.use('/manifest.webmanifest', serveStatic({ root: './public' }))
 app.use('/icon.svg', serveStatic({ root: './public' }))
 app.use('/sw.js', serveStatic({ root: './public' }))
