@@ -25,6 +25,24 @@ body {
 body.modal-open {
   overflow: hidden;
 }
+
+html.camera-mode,
+body.camera-mode {
+  overflow: hidden !important;
+  height: 100% !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+body.camera-mode .app-shell {
+  height: 100% !important;
+  height: 100dvh !important;
+  max-height: 100dvh !important;
+  overflow: hidden !important;
+  min-height: 0 !important;
+}
 button { font: inherit; touch-action: manipulation; }
 button:focus-visible { outline: 2px solid #71f2ff; outline-offset: 4px; }
 
@@ -144,12 +162,11 @@ h1 em { color: #5eeeff; font-style: normal; text-shadow: 0 0 35px rgba(94, 238, 
   .filter-pill { flex-shrink: 0; white-space: nowrap; }
 
   .test-screen {
-    position: fixed;
-    inset: 0;
-    width: 100vw;
+    position: relative;
+    width: 100% !important;
     height: 100dvh;
     max-height: 100dvh;
-    margin: 0;
+    margin: 0 !important;
     border: 0;
     box-shadow: none;
     display: flex;
@@ -157,7 +174,6 @@ h1 em { color: #5eeeff; font-style: normal; text-shadow: 0 0 35px rgba(94, 238, 
     overflow: hidden;
     overscroll-behavior: none;
     touch-action: none;
-    z-index: 60;
     background: #040b14;
   }
   .camera-stage {
@@ -611,7 +627,7 @@ h1 em { color: #5eeeff; font-style: normal; text-shadow: 0 0 35px rgba(94, 238, 
   top: 18px;
   left: 20px;
   right: 20px;
-  z-index: 8;
+  z-index: 30;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -759,6 +775,7 @@ h1 em { color: #5eeeff; font-style: normal; text-shadow: 0 0 35px rgba(94, 238, 
     left: 12px;
     right: 12px;
     gap: 8px;
+    z-index: 30;
   }
   .camera-exit-button {
     padding: 6px 12px;

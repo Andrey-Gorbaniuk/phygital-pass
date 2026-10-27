@@ -136,6 +136,20 @@ export default function App() {
     viewRef.current = view
   }, [view])
 
+  const isCameraActive = view === 'setup' || view === 'positioning' || view === 'calibrating' || view === 'countdown' || view === 'active'
+
+  useEffect(() => {
+    if (isCameraActive) {
+      window.scrollTo(0, 0)
+      document.documentElement.classList.add('camera-mode')
+      document.body.classList.add('camera-mode')
+      return () => {
+        document.documentElement.classList.remove('camera-mode')
+        document.body.classList.remove('camera-mode')
+      }
+    }
+  }, [isCameraActive])
+
   useEffect(() => {
     if (!motionSignal || view !== 'active') return
     const timer = window.setTimeout(() => setMotionSignal(null), 1200)
@@ -334,7 +348,9 @@ export default function App() {
     stopCamera()
     setView('catalog')
     requestAnimationFrame(() => {
-      window.scrollTo({ top: catalogScrollYRef.current, behavior: 'instant' })
+      setTimeout(() => {
+        window.scrollTo({ top: catalogScrollYRef.current, behavior: 'instant' })
+      }, 30)
     })
   }
 
@@ -634,7 +650,7 @@ export default function App() {
 
       {/* VIEW: TEST & ACTIVE CAMERA SCREEN */}
       {(view === 'setup' || view === 'positioning' || view === 'calibrating' || view === 'countdown' || view === 'active') && (
-        <section className="test-screen screen-enter">
+        <section className="test-screen">
           <div className="camera-stage">
             <video ref={videoRef} className="camera-feed" muted playsInline />
             <canvas ref={canvasRef} className="pose-canvas" />
