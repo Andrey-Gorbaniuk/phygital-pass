@@ -30,7 +30,7 @@ export function ChallengeHub({ onClose }: Props) {
   return (
     <section className="challenge-screen screen-enter">
       <div className="challenge-header">
-        <div><div className="eyebrow"><span className="pulse-dot" /> CAMPUS CHALLENGES</div><h1>Челленджи <em>движения</em></h1></div>
+        <div><div className="eyebrow">КАФЕДРА ФИЗИЧЕСКОГО ВОСПИТАНИЯ МТУСИ</div><h1>Челленджи <em>движения</em></h1></div>
         <button className="text-button" type="button" onClick={onClose}>На главный экран</button>
       </div>
       {error && <p className="service-error">{error}</p>}

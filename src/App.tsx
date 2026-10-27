@@ -624,13 +624,13 @@ export default function App() {
             )}
 
             <div className="scan-line" />
-            {cameraStatus === 'loading' && <div className="camera-message"><LoadingMark /> Подключаем камеру и модель MediaPipe…</div>}
+            {cameraStatus === 'loading' && <div className="camera-message"><LoadingMark /> Подключаем камеру и нейросетевую модель…</div>}
             {cameraStatus === 'error' && <div className="camera-message error-message">{error ?? 'Не удалось запустить камеру.'}</div>}
             {view === 'positioning' && (
               <div className="camera-transition">
-                <span>ОТОЙДИТЕ К КАМЕРЕ</span>
+                <span>ВСТАНЬТЕ В КАДР</span>
                 <strong>{countdown}</strong>
-                <p>Установите телефон на уровне {selectedExercise.cameraDistance}. Встаньте в кадр.</p>
+                <p>Установите телефон на уровне {selectedExercise.cameraDistance}. Займите исходное положение.</p>
               </div>
             )}
             {view === 'calibrating' && (
