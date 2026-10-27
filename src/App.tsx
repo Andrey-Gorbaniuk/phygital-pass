@@ -351,14 +351,32 @@ export default function App() {
       <div className="grid-overlay" />
 
       <header className="topbar">
-        <button className="brand" type="button" onClick={closeToHome} aria-label="На главную">
+        <div className="brand" aria-label="Phygital Pass">
           <span className="brand-mark"><i /><i /><i /></span>
           <span>PHYGITAL <b>PASS</b></span>
-        </button>
+        </div>
         <div className="topbar-links">
-          <button type="button" onClick={() => { stopCamera(); setView('catalog') }}>Нормативы</button>
-          <button type="button" onClick={() => { stopCamera(); setView('challenges') }}>Челленджи</button>
-          <button type="button" onClick={() => { stopCamera(); setView('organizer') }}>Организатор</button>
+          <button
+            type="button"
+            className={view === 'catalog' || view === 'setup' || view === 'positioning' || view === 'calibrating' || view === 'countdown' || view === 'active' || view === 'result' ? 'active-nav' : ''}
+            onClick={() => { stopCamera(); setView('catalog') }}
+          >
+            Нормативы
+          </button>
+          <button
+            type="button"
+            className={view === 'challenges' ? 'active-nav' : ''}
+            onClick={() => { stopCamera(); setView('challenges') }}
+          >
+            Челленджи
+          </button>
+          <button
+            type="button"
+            className={view === 'organizer' ? 'active-nav' : ''}
+            onClick={() => { stopCamera(); setView('organizer') }}
+          >
+            Организатор
+          </button>
           <span className="topbar-note">МТУСИ / КАФЕДРА ФИЗВОСПИТАНИЯ</span>
         </div>
       </header>
@@ -368,12 +386,11 @@ export default function App() {
         <section className="catalog-screen screen-enter">
           <div className="catalog-header">
             <span className="dept-badge">
-              <span className="pulse-dot" /> МТУСИ • КАФЕДРА ФИЗИЧЕСКОГО ВОСПИТАНИЯ
+              МТУСИ • КАФЕДРА ФИЗИЧЕСКОГО ВОСПИТАНИЯ
             </span>
-            <h1>Комплекс <em>12 нормативов</em></h1>
+            <h1>Комплекс <em>нормативов</em></h1>
             <p>
-              Официальный методический комплекс упражнений ОФП кафедры физвоспитания МТУСИ.
-              Интерактивные нормативы проверяются в реальном времени с камеры смартфона с помощью нейросетевого зрения (MediaPipe).
+              Методический комплекс упражнений ОФП кафедры физвоспитания МТУСИ. Интерактивные нормативы проверяются в реальном времени с камеры смартфона с помощью нейросетевого зрения.
             </p>
           </div>
 
@@ -413,12 +430,6 @@ export default function App() {
                 onClick={() => setFilterCategory('Функциональный тренинг')}
               >
                 Функциональные
-              </button>
-            </div>
-
-            <div className="catalog-actions-right">
-              <button className="landing-challenge-link" type="button" onClick={() => setView('challenges')}>
-                Рейтинг факультетов МТУСИ <b>↗</b>
               </button>
             </div>
           </div>
@@ -465,14 +476,24 @@ export default function App() {
                 </div>
 
                 {exercise.isInteractive ? (
-                  <button
-                    className="card-btn start-interactive"
-                    type="button"
-                    onClick={() => startExercise(exercise)}
-                  >
-                    <span>Сдать норматив на камеру</span>
-                    <b>→</b>
-                  </button>
+                  <div className="card-actions-group">
+                    <button
+                      className="card-btn start-interactive"
+                      type="button"
+                      onClick={() => startExercise(exercise)}
+                    >
+                      <span>Сдать норматив на камеру</span>
+                      <b>→</b>
+                    </button>
+                    <button
+                      className="card-btn view-spec-secondary"
+                      type="button"
+                      onClick={() => setDetailExercise(exercise)}
+                    >
+                      <span>Методические правила и углы</span>
+                      <b>↗</b>
+                    </button>
+                  </div>
                 ) : (
                   <button
                     className="card-btn view-spec"
