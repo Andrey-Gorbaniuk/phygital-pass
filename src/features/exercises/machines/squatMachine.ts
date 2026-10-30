@@ -25,6 +25,7 @@ export class SquatMachine implements IExerciseMachine {
   private repStartedAt?: number
   private minKneeAngle?: number
   private lastRepAt?: number
+  private trackingLostAt?: number
   private targetReps = 10
 
   constructor(targetReps = 10) {
@@ -39,6 +40,7 @@ export class SquatMachine implements IExerciseMachine {
     this.repStartedAt = undefined
     this.minKneeAngle = undefined
     this.lastRepAt = undefined
+    this.trackingLostAt = undefined
   }
 
   process(observation: ExerciseObservation): ExerciseSnapshot {
@@ -46,10 +48,20 @@ export class SquatMachine implements IExerciseMachine {
     const kneeAngle = assessment.kneeAngle
 
     if (!isVisible || kneeAngle === undefined) {
+      if (this.phase !== 'idle' && this.phase !== 'paused') {
+        if (!this.trackingLostAt) {
+          this.trackingLostAt = timestamp
+          return this.snapshot(undefined, undefined, kneeAngle)
+        } else if (timestamp - this.trackingLostAt < 450) {
+          return this.snapshot(undefined, undefined, kneeAngle)
+        }
+      }
       const lastRejected = this.rejectCurrentRep('tracking', 'Трекинг потерян — вернитесь в кадр')
       this.phase = 'paused'
+      this.trackingLostAt = undefined
       return this.snapshot(undefined, lastRejected, kneeAngle)
     }
+    this.trackingLostAt = undefined
 
     if (this.phase === 'paused' || this.phase === 'idle') {
       this.phase = kneeAngle >= STANDING_ANGLE ? 'ready' : 'idle'

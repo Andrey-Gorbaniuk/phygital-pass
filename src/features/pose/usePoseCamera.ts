@@ -100,9 +100,9 @@ export function usePoseCamera({ videoRef, canvasRef, onFrame }: UsePoseCameraOpt
         baseOptions: { modelAssetPath },
         runningMode: 'VIDEO',
         numPoses: 2,
-        minPoseDetectionConfidence: 0.6,
-        minPosePresenceConfidence: 0.6,
-        minTrackingConfidence: 0.6,
+        minPoseDetectionConfidence: 0.48,
+        minPosePresenceConfidence: 0.48,
+        minTrackingConfidence: 0.48,
       })
 
       const video = videoRef.current

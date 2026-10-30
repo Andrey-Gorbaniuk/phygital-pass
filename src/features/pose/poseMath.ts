@@ -22,10 +22,8 @@ type FullSide = {
   wrist: PoseLandmark
   hip: PoseLandmark
   knee: PoseLandmark
-  ankle: PoseLandmark
+  ankle?: PoseLandmark
 }
-
-const VISIBILITY_THRESHOLD = 0.52
 
 const LEFT = { shoulder: 11, elbow: 13, wrist: 15, hip: 23, knee: 25, ankle: 27 }
 const RIGHT = { shoulder: 12, elbow: 14, wrist: 16, hip: 24, knee: 26, ankle: 28 }
@@ -45,6 +43,34 @@ export function calculateAngle(first: PoseLandmark, vertex: PoseLandmark, third:
   return Math.round((Math.acos(cosine) * 180) / Math.PI)
 }
 
+function sideScore(side: FullSide): number {
+  const shoulderVis = side.shoulder.visibility ?? 1
+  const hipVis = side.hip.visibility ?? 1
+  const elbowVis = side.elbow.visibility ?? 1
+  const kneeVis = side.knee.visibility ?? 1
+  const wristVis = side.wrist.visibility ?? 1
+  const ankleVis = side.ankle ? (side.ankle.visibility ?? 1) : 0.6
+
+  const torso = (shoulderVis + hipVis) / 2
+  const limbs = (elbowVis + kneeVis + wristVis + ankleVis) / 4
+  return torso * 0.45 + limbs * 0.55
+}
+
+function isSideVisible(side: FullSide): boolean {
+  const shoulderVis = side.shoulder.visibility ?? 1
+  const hipVis = side.hip.visibility ?? 1
+  const elbowVis = side.elbow.visibility ?? 1
+  const kneeVis = side.knee.visibility ?? 1
+
+  // Torso must be detected
+  if (shoulderVis < 0.32 || hipVis < 0.32) return false
+
+  // At least one major limb joint must have detection
+  if (elbowVis < 0.28 && kneeVis < 0.28) return false
+
+  return sideScore(side) >= 0.36
+}
+
 export function assessPose(poses: PoseLandmark[][]): PoseAssessment {
   if (poses.length !== 1) {
     return { poseCount: poses.length, isVisible: false }
@@ -59,15 +85,25 @@ export function assessPose(poses: PoseLandmark[][]): PoseAssessment {
     return { poseCount: 1, isVisible: false }
   }
 
-  const bestSide = candidates.sort((first, second) => sideVisibility(second) - sideVisibility(first))[0]
-  if (sideVisibility(bestSide) < VISIBILITY_THRESHOLD) {
+  const bestSide = candidates.sort((first, second) => sideScore(second) - sideScore(first))[0]
+  if (!isSideVisible(bestSide)) {
     return { poseCount: 1, isVisible: false }
   }
 
-  const kneeAngle = calculateAngle(bestSide.hip, bestSide.knee, bestSide.ankle)
   const elbowAngle = calculateAngle(bestSide.shoulder, bestSide.elbow, bestSide.wrist)
   const hipAngle = calculateAngle(bestSide.shoulder, bestSide.hip, bestSide.knee)
-  const bodyLineAngle = calculateAngle(bestSide.shoulder, bestSide.hip, bestSide.ankle)
+
+  // kneeAngle: use ankle if available
+  const kneeAngle = bestSide.ankle
+    ? calculateAngle(bestSide.hip, bestSide.knee, bestSide.ankle)
+    : undefined
+
+  // bodyLineAngle: if ankle is visible, measure shoulder-hip-ankle.
+  // If ankle is off-screen (e.g. floor pushups/plank), fallback to shoulder-hip-knee!
+  const bodyLineAngle = bestSide.ankle
+    ? calculateAngle(bestSide.shoulder, bestSide.hip, bestSide.ankle)
+    : hipAngle
+
   const kneeToElbowDistance = Number(
     Math.hypot(bestSide.knee.x - bestSide.elbow.x, bestSide.knee.y - bestSide.elbow.y).toFixed(3),
   )
@@ -91,15 +127,18 @@ function sideFrom(landmarks: PoseLandmark[], indexes: typeof LEFT): FullSide | u
   const hip = landmarks[indexes.hip]
   const knee = landmarks[indexes.knee]
   const ankle = landmarks[indexes.ankle]
-  return shoulder && elbow && wrist && hip && knee && ankle
-    ? { shoulder, elbow, wrist, hip, knee, ankle }
-    : undefined
-}
 
-function sideVisibility(side: FullSide): number {
-  return Math.min(
-    ...[side.shoulder, side.elbow, side.wrist, side.hip, side.knee, side.ankle].map(
-      (landmark) => landmark.visibility ?? 1,
-    ),
-  )
+  if (!shoulder || !hip) return undefined
+
+  // If ankle exists and has >= 0.2 visibility, keep it; otherwise undefined (so floor exercises won't fail)
+  const validAnkle = ankle && (ankle.visibility ?? 1) >= 0.2 ? ankle : undefined
+
+  return {
+    shoulder,
+    elbow: elbow ?? shoulder,
+    wrist: wrist ?? elbow ?? shoulder,
+    hip,
+    knee: knee ?? hip,
+    ankle: validAnkle,
+  }
 }

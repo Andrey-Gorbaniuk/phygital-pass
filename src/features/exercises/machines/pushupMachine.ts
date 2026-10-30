@@ -7,14 +7,14 @@ import type {
   IExerciseMachine,
 } from '../types'
 
-const TOP_ELBOW_ANGLE = 155
-const DESCENDING_ELBOW_ANGLE = 140
-const BOTTOM_ELBOW_ANGLE = 95
-const ASCENDING_ELBOW_ANGLE = 120
-const MIN_BOTTOM_HOLD_MS = 250 // Sablin: фиксация груди внизу
-const MIN_REP_DURATION_MS = 600
-const REP_COOLDOWN_MS = 450
-const MIN_BODY_LINE_ANGLE = 145
+const TOP_ELBOW_ANGLE = 150
+const DESCENDING_ELBOW_ANGLE = 138
+const BOTTOM_ELBOW_ANGLE = 100
+const ASCENDING_ELBOW_ANGLE = 118
+const MIN_BOTTOM_HOLD_MS = 140
+const MIN_REP_DURATION_MS = 550
+const REP_COOLDOWN_MS = 400
+const MIN_BODY_LINE_ANGLE = 135
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
@@ -27,6 +27,7 @@ export class PushupMachine implements IExerciseMachine {
   private minElbowAngle?: number
   private minBodyLine?: number
   private lastRepAt?: number
+  private trackingLostAt?: number
   private targetReps = 12
 
   constructor(targetReps = 12) {
@@ -42,6 +43,7 @@ export class PushupMachine implements IExerciseMachine {
     this.minElbowAngle = undefined
     this.minBodyLine = undefined
     this.lastRepAt = undefined
+    this.trackingLostAt = undefined
   }
 
   process(observation: ExerciseObservation): ExerciseSnapshot {
@@ -50,10 +52,20 @@ export class PushupMachine implements IExerciseMachine {
     const bodyLine = assessment.bodyLineAngle
 
     if (!isVisible || elbowAngle === undefined) {
+      if (this.phase !== 'idle' && this.phase !== 'paused') {
+        if (!this.trackingLostAt) {
+          this.trackingLostAt = timestamp
+          return this.snapshot(undefined, undefined, elbowAngle)
+        } else if (timestamp - this.trackingLostAt < 450) {
+          return this.snapshot(undefined, undefined, elbowAngle)
+        }
+      }
       const lastRejected = this.rejectCurrentRep('tracking', 'Трекинг потерян — держите руки и корпус в кадре')
       this.phase = 'paused'
+      this.trackingLostAt = undefined
       return this.snapshot(undefined, lastRejected, elbowAngle)
     }
+    this.trackingLostAt = undefined
 
     // Body line check (no sagging hips)
     if (bodyLine !== undefined && bodyLine < MIN_BODY_LINE_ANGLE && this.phase !== 'idle' && this.phase !== 'paused') {

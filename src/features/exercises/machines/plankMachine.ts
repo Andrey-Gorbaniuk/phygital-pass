@@ -7,8 +7,8 @@ import type {
   IExerciseMachine,
 } from '../types'
 
-const MIN_BODY_LINE = 150
-const MAX_PIKE_ANGLE = 140 // hip angle
+const MIN_BODY_LINE = 138
+const MAX_PIKE_ANGLE = 135 // hip angle
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
