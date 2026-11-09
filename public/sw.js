@@ -22,7 +22,9 @@ self.addEventListener('fetch', (event) => {
           void caches.open(CACHE).then((cache) => cache.put(request, copy))
         }
         return response
-      }).catch(() => caches.match(request))
+      }).catch(() =>
+        caches.match(request).then((res) => res ?? caches.match('/') ?? caches.match('/index.html'))
+      )
     )
     return
   }

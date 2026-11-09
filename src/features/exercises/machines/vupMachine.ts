@@ -24,6 +24,7 @@ export class VupMachine implements IExerciseMachine {
   private minHipAngle?: number
   private lastRepAt?: number
   private targetReps = 15
+  private trackingLostAt?: number
 
   constructor(targetReps = 15) {
     this.targetReps = targetReps
@@ -36,6 +37,7 @@ export class VupMachine implements IExerciseMachine {
     this.repStartedAt = undefined
     this.minHipAngle = undefined
     this.lastRepAt = undefined
+    this.trackingLostAt = undefined
   }
 
   process(observation: ExerciseObservation): ExerciseSnapshot {
@@ -43,10 +45,21 @@ export class VupMachine implements IExerciseMachine {
     const hipAngle = assessment.hipAngle
 
     if (!isVisible || hipAngle === undefined) {
+      if (this.phase !== 'idle' && this.phase !== 'paused') {
+        if (!this.trackingLostAt) {
+          this.trackingLostAt = timestamp
+          return this.snapshot(undefined, undefined, hipAngle)
+        } else if (timestamp - this.trackingLostAt < 450) {
+          return this.snapshot(undefined, undefined, hipAngle)
+        }
+      }
+      this.trackingLostAt = undefined
       const lastRejected = this.rejectCurrentRep('tracking', 'Трекинг потерян — оставайтесь в кадре лёжа на полу')
       this.phase = 'paused'
       return this.snapshot(undefined, lastRejected, hipAngle)
     }
+
+    this.trackingLostAt = undefined
 
     if (this.phase === 'paused' || this.phase === 'idle') {
       this.phase = hipAngle >= FLAT_HIP_ANGLE ? 'ready' : 'idle'

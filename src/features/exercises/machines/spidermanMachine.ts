@@ -23,6 +23,7 @@ export class SpidermanMachine implements IExerciseMachine {
   private minDistance?: number
   private lastRepAt?: number
   private targetReps = 12
+  private trackingLostAt?: number
 
   constructor(targetReps = 12) {
     this.targetReps = targetReps
@@ -35,6 +36,7 @@ export class SpidermanMachine implements IExerciseMachine {
     this.repStartedAt = undefined
     this.minDistance = undefined
     this.lastRepAt = undefined
+    this.trackingLostAt = undefined
   }
 
   process(observation: ExerciseObservation): ExerciseSnapshot {
@@ -42,10 +44,21 @@ export class SpidermanMachine implements IExerciseMachine {
     const distance = assessment.kneeToElbowDistance
 
     if (!isVisible || distance === undefined) {
+      if (this.phase !== 'idle' && this.phase !== 'paused') {
+        if (!this.trackingLostAt) {
+          this.trackingLostAt = timestamp
+          return this.snapshot(undefined, undefined, distance)
+        } else if (timestamp - this.trackingLostAt < 450) {
+          return this.snapshot(undefined, undefined, distance)
+        }
+      }
+      this.trackingLostAt = undefined
       const lastRejected = this.rejectCurrentRep('tracking', 'Трекинг потерян — примите упор лёжа перед камерой')
       this.phase = 'paused'
       return this.snapshot(undefined, lastRejected, distance)
     }
+
+    this.trackingLostAt = undefined
 
     if (this.phase === 'paused' || this.phase === 'idle') {
       this.phase = distance >= START_DISTANCE ? 'ready' : 'idle'

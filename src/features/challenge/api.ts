@@ -84,12 +84,17 @@ async function createParticipant(alias: string): Promise<StoredParticipant> {
   return participant
 }
 
-export async function submitChallengeResult(challengeId: string, alias: string, result: SubmissionResult): Promise<{ score: number; notice: string }> {
+export async function submitChallengeResult(
+  challengeId: string,
+  alias: string,
+  result: SubmissionResult,
+  protocolVersion?: string,
+): Promise<{ score: number; notice: string }> {
   const participant = getStoredParticipant() ?? await createParticipant(alias)
   return request<{ score: number; notice: string }>(`/challenges/${challengeId}/submissions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${participant.token}` },
-    body: JSON.stringify({ ...result, protocolVersion: SQUAT_PROTOCOL.id }),
+    body: JSON.stringify({ ...result, protocolVersion: protocolVersion ?? SQUAT_PROTOCOL.id }),
   })
 }
 

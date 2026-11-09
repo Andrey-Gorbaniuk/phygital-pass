@@ -7,6 +7,7 @@ import { OrganizerConsole } from './features/admin/OrganizerConsole'
 import { downloadResultCard } from './features/share/shareResult'
 import { EXERCISE_REGISTRY } from './features/exercises/registry'
 import { createExerciseMachine } from './features/exercises/machineFactory'
+import { isSoundMuted, playSound, toggleSoundMuted } from './features/audio/soundFeedback'
 import type {
   ExerciseCategory,
   ExerciseCompletedRep,
@@ -82,18 +83,6 @@ function readResultHistory(): TestResult[] {
   }
 }
 
-function speakText(text: string) {
-  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
-  try {
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'ru-RU'
-    utterance.rate = 1.05
-    window.speechSynthesis.speak(utterance)
-  } catch {
-    // voice feedback is an enhancement
-  }
-}
 
 export default function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -103,11 +92,30 @@ export default function App() {
   const repsRef = useRef<ExerciseCompletedRep[]>([])
   const rejectedRepsRef = useRef<ExerciseRejectedRep[]>([])
 
+  const [soundMuted, setSoundMutedState] = useState(() => isSoundMuted())
+  const handleToggleMute = () => {
+    const next = toggleSoundMuted()
+    setSoundMutedState(next)
+  }
+
   const [view, setView] = useState<View>('catalog')
   const [selectedExercise, setSelectedExercise] = useState<ExerciseDefinition>(EXERCISE_REGISTRY[0])
   const [detailExercise, setDetailExercise] = useState<ExerciseDefinition | null>(null)
   const [filterCategory, setFilterCategory] = useState<string>('all')
   const catalogScrollYRef = useRef<number>(0)
+
+  const openDetail = (exercise: ExerciseDefinition) => {
+    try {
+      window.history.pushState({ modal: 'detail' }, '')
+    } catch {
+      // ignore
+    }
+    setDetailExercise(exercise)
+  }
+
+  const closeDetail = () => {
+    setDetailExercise(null)
+  }
 
   useEffect(() => {
     if (detailExercise) {
@@ -149,6 +157,19 @@ export default function App() {
       }
     }
   }, [isCameraActive])
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (detailExercise) {
+        setDetailExercise(null)
+      } else if (viewRef.current !== 'catalog') {
+        stopCamera()
+        setView('catalog')
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [detailExercise])
 
   useEffect(() => {
     if (!motionSignal || view !== 'active') return
@@ -197,7 +218,7 @@ export default function App() {
       if (!snapshot.lastRep) return
 
       setMotionSignal({ id: timestamp, kind: 'accepted', message: `Засчитано: ${snapshot.repetitions}` })
-      speakText(`${snapshot.repetitions}`)
+      playSound('rep')
       if ('vibrate' in navigator) navigator.vibrate(20)
 
       const allReps = [...repsRef.current, snapshot.lastRep]
@@ -253,12 +274,11 @@ export default function App() {
       setHistory((existing) => [completedResult, ...existing.filter((i) => i.completedAt !== completedResult.completedAt)].slice(0, MAX_LOCAL_RESULTS))
       setResult(completedResult)
       setView('result')
-      speakText('Норматив выполнен!')
     },
     [selectedExercise, updateTracking],
   )
 
-  const { error, startCamera, status: cameraStatus, stopCamera } = usePoseCamera({
+  const { error, facingMode, startCamera, status: cameraStatus, stopCamera, toggleCameraFacing } = usePoseCamera({
     videoRef,
     canvasRef,
     onFrame,
@@ -294,7 +314,6 @@ export default function App() {
       if (viewRef.current !== 'calibrating') return
       setCountdown(3)
       setView('countdown')
-      speakText('Приготовиться. Три, два, один')
     }, 850)
 
     return () => window.clearTimeout(timer)
@@ -317,7 +336,6 @@ export default function App() {
           setPhase('ready')
           setFeedback('Начинайте выполнение')
           setView('active')
-          speakText('Старт!')
           return 0
         }
         return current - 1
@@ -328,6 +346,11 @@ export default function App() {
   }, [selectedExercise, view])
 
   const startExercise = (exercise: ExerciseDefinition) => {
+    try {
+      window.history.pushState({ view: 'setup' }, '')
+    } catch {
+      // ignore
+    }
     catalogScrollYRef.current = window.scrollY
     setSelectedExercise(exercise)
     setMotionSignal(null)
@@ -336,6 +359,19 @@ export default function App() {
     setView('setup')
     window.scrollTo({ top: 0, behavior: 'instant' })
     void startCamera()
+  }
+
+  const navigateTo = (targetView: View) => {
+    if (targetView === view) return
+    stopCamera()
+    if (targetView !== 'catalog') {
+      try {
+        window.history.pushState({ view: targetView }, '')
+      } catch {
+        // ignore
+      }
+    }
+    setView(targetView)
   }
 
   const startTestFromSetup = () => {
@@ -393,21 +429,21 @@ export default function App() {
             <button
               type="button"
               className={view === 'catalog' || view === 'result' ? 'active-nav' : ''}
-              onClick={() => { stopCamera(); setView('catalog') }}
+              onClick={() => navigateTo('catalog')}
             >
               Нормативы
             </button>
             <button
               type="button"
               className={view === 'challenges' ? 'active-nav' : ''}
-              onClick={() => { stopCamera(); setView('challenges') }}
+              onClick={() => navigateTo('challenges')}
             >
               Челленджи
             </button>
             <button
               type="button"
               className={view === 'organizer' ? 'active-nav' : ''}
-              onClick={() => { stopCamera(); setView('organizer') }}
+              onClick={() => navigateTo('organizer')}
             >
               Организатор
             </button>
@@ -481,13 +517,13 @@ export default function App() {
               <article
                 key={exercise.id}
                 className={`exercise-card ${exercise.isInteractive ? 'interactive' : 'spec'}`}
-                onClick={() => setDetailExercise(exercise)}
+                onClick={() => openDetail(exercise)}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    setDetailExercise(exercise)
+                    openDetail(exercise)
                   }
                 }}
               >
@@ -534,7 +570,7 @@ export default function App() {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        setDetailExercise(exercise)
+                        openDetail(exercise)
                       }}
                     >
                       <span>Методические правила и углы</span>
@@ -547,7 +583,7 @@ export default function App() {
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation()
-                      setDetailExercise(exercise)
+                      openDetail(exercise)
                     }}
                   >
                     <span>Методические правила и углы</span>
@@ -562,9 +598,9 @@ export default function App() {
 
       {/* DETAIL MODAL FOR SPECIFICATION / DOSAGE DETAILS */}
       {detailExercise && (
-        <div className="modal-overlay" onClick={() => setDetailExercise(null)}>
+        <div className="modal-overlay" onClick={closeDetail}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <button className="modal-close" type="button" onClick={() => setDetailExercise(null)}>
+            <button className="modal-close" type="button" onClick={closeDetail}>
               ×
             </button>
 
@@ -633,9 +669,23 @@ export default function App() {
               </tbody>
             </table>
 
-            <div className="modal-footer">
-              <button className="secondary-button" type="button" onClick={() => setDetailExercise(null)}>
-                Понятно, закрыть
+            <div className="modal-footer modal-footer-dual">
+              {detailExercise.isInteractive && (
+                <button
+                  className="primary-button modal-start-btn"
+                  type="button"
+                  onClick={() => {
+                    const ex = detailExercise
+                    closeDetail()
+                    startExercise(ex)
+                  }}
+                >
+                  <span>Сдать норматив на камеру</span>
+                  <b>→</b>
+                </button>
+              )}
+              <button className="secondary-button" type="button" onClick={closeDetail}>
+                {detailExercise.isInteractive ? 'Закрыть' : 'Понятно, закрыть'}
               </button>
             </div>
           </div>
@@ -652,8 +702,16 @@ export default function App() {
       {(view === 'setup' || view === 'positioning' || view === 'calibrating' || view === 'countdown' || view === 'active') && (
         <section className="test-screen">
           <div className="camera-stage">
-            <video ref={videoRef} className="camera-feed" muted playsInline />
-            <canvas ref={canvasRef} className="pose-canvas" />
+            <video
+              ref={videoRef}
+              className={`camera-feed ${facingMode === 'environment' ? 'rear-camera' : ''}`}
+              muted
+              playsInline
+            />
+            <canvas
+              ref={canvasRef}
+              className={`pose-canvas ${facingMode === 'environment' ? 'rear-camera' : ''}`}
+            />
             <div className="camera-vignette" />
 
             <span className="corner corner-top-left" />
@@ -665,6 +723,14 @@ export default function App() {
             <div className="camera-top-actions">
               <button type="button" className="camera-exit-button" onClick={closeToHome}>
                 ✕ Выход
+              </button>
+              <button
+                type="button"
+                className={`camera-sound-button ${soundMuted ? 'muted' : ''}`}
+                onClick={handleToggleMute}
+                title={soundMuted ? 'Включить звук' : 'Выключить звук'}
+              >
+                <span>{soundMuted ? '🔇' : '🔊'}</span>
               </button>
               <div className="live-camera-angle-hint">
                 РАКУРС: {selectedExercise.cameraAngle.toUpperCase()}
@@ -740,17 +806,27 @@ export default function App() {
                   </div>
                 </div>
 
-                {cameraStatus === 'error' && (
-                  <button className="secondary-button" type="button" onClick={() => void startCamera()}>
-                    Попробовать снова
+                <div className="setup-actions-block">
+                  {cameraStatus === 'error' && (
+                    <button className="secondary-button" type="button" onClick={() => void startCamera()}>
+                      Попробовать снова
+                    </button>
+                  )}
+                  {cameraStatus !== 'error' && (
+                    <button className="primary-button start-button" type="button" disabled={!canStart} onClick={startTestFromSetup}>
+                      <span>{canStart ? 'Я готов — отойду к камере' : 'Подключаем камеру'}</span>
+                      <b>→</b>
+                    </button>
+                  )}
+                  <button
+                    className="camera-switch-pill"
+                    type="button"
+                    onClick={() => void toggleCameraFacing()}
+                    title="Сменить камеру"
+                  >
+                    🔄 {facingMode === 'user' ? 'Фронтальная камера' : 'Основная (задняя) камера'}
                   </button>
-                )}
-                {cameraStatus !== 'error' && (
-                  <button className="primary-button start-button" type="button" disabled={!canStart} onClick={startTestFromSetup}>
-                    <span>{canStart ? 'Я готов — отойду к камере' : 'Подключаем камеру'}</span>
-                    <b>→</b>
-                  </button>
-                )}
+                </div>
               </div>
             ) : (
               <>

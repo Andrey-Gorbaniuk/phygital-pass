@@ -4,6 +4,7 @@ import { drawPose } from './drawPose'
 import type { PoseLandmark } from './poseMath'
 
 export type CameraStatus = 'idle' | 'loading' | 'ready' | 'error'
+export type CameraFacing = 'user' | 'environment'
 
 export type PoseFrame = {
   timestamp: number
@@ -22,13 +23,16 @@ const FRAME_INTERVAL_MS = 67
 
 export function usePoseCamera({ videoRef, canvasRef, onFrame }: UsePoseCameraOptions) {
   const [status, setStatus] = useState<CameraStatus>('idle')
+  const [facingMode, setFacingMode] = useState<CameraFacing>('user')
   const [error, setError] = useState<string | null>(null)
+
   const landmarkerRef = useRef<PoseLandmarker | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const lastInferenceAtRef = useRef(0)
   const onFrameRef = useRef(onFrame)
   const runLoopRef = useRef<() => void>(() => undefined)
+  const facingModeRef = useRef<CameraFacing>('user')
 
   useEffect(() => {
     onFrameRef.current = onFrame
@@ -74,36 +78,47 @@ export function usePoseCamera({ videoRef, canvasRef, onFrame }: UsePoseCameraOpt
     runLoopRef.current = runLoop
   }, [runLoop])
 
-  const startCamera = useCallback(async () => {
+  const startCamera = useCallback(async (preferredFacing?: CameraFacing) => {
     if (!navigator.mediaDevices?.getUserMedia) {
       setError('Этот браузер не поддерживает доступ к камере.')
       setStatus('error')
       return
     }
 
+    const targetFacing = preferredFacing ?? facingModeRef.current
+    setFacingMode(targetFacing)
+    facingModeRef.current = targetFacing
+
     try {
       setStatus('loading')
       setError(null)
 
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current = null
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: {
-          facingMode: 'user',
+          facingMode: { ideal: targetFacing },
           width: { ideal: 1280 },
           height: { ideal: 960 },
         },
       })
 
-      const vision = await FilesetResolver.forVisionTasks(WASM_ROOT)
-      const modelAssetPath = new URL(MODEL_PATH, window.location.origin).toString()
-      landmarkerRef.current = await PoseLandmarker.createFromOptions(vision, {
-        baseOptions: { modelAssetPath },
-        runningMode: 'VIDEO',
-        numPoses: 2,
-        minPoseDetectionConfidence: 0.48,
-        minPosePresenceConfidence: 0.48,
-        minTrackingConfidence: 0.48,
-      })
+      if (!landmarkerRef.current) {
+        const vision = await FilesetResolver.forVisionTasks(WASM_ROOT)
+        const modelAssetPath = new URL(MODEL_PATH, window.location.origin).toString()
+        landmarkerRef.current = await PoseLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath },
+          runningMode: 'VIDEO',
+          numPoses: 2,
+          minPoseDetectionConfidence: 0.48,
+          minPosePresenceConfidence: 0.48,
+          minTrackingConfidence: 0.48,
+        })
+      }
 
       const video = videoRef.current
       if (!video) throw new Error('Видеоэлемент недоступен.')
@@ -123,7 +138,71 @@ export function usePoseCamera({ videoRef, canvasRef, onFrame }: UsePoseCameraOpt
     }
   }, [runLoop, videoRef])
 
+  const toggleCameraFacing = useCallback(async () => {
+    const nextFacing: CameraFacing = facingModeRef.current === 'user' ? 'environment' : 'user'
+    setFacingMode(nextFacing)
+    facingModeRef.current = nextFacing
+
+    if (streamRef.current && status === 'ready') {
+      try {
+        if (animationFrameRef.current !== null) {
+          window.cancelAnimationFrame(animationFrameRef.current)
+          animationFrameRef.current = null
+        }
+        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current = null
+
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: nextFacing },
+            width: { ideal: 1280 },
+            height: { ideal: 960 },
+          },
+        })
+        const video = videoRef.current
+        if (video) {
+          streamRef.current = newStream
+          video.srcObject = newStream
+          await video.play()
+          lastInferenceAtRef.current = 0
+          animationFrameRef.current = window.requestAnimationFrame(() => runLoopRef.current())
+        }
+      } catch {
+        // Fall back to original facing mode if device does not support requested orientation
+        setFacingMode('user')
+        facingModeRef.current = 'user'
+        try {
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              facingMode: { ideal: 'user' },
+              width: { ideal: 1280 },
+              height: { ideal: 960 },
+            },
+          })
+          const video = videoRef.current
+          if (video) {
+            streamRef.current = fallbackStream
+            video.srcObject = fallbackStream
+            await video.play()
+            animationFrameRef.current = window.requestAnimationFrame(() => runLoopRef.current())
+          }
+        } catch {
+          // ignore fallback error
+        }
+      }
+    }
+  }, [status, videoRef])
+
   useEffect(() => stopCamera, [stopCamera])
 
-  return { error, startCamera, status, stopCamera }
+  return {
+    error,
+    facingMode,
+    startCamera,
+    status,
+    stopCamera,
+    toggleCameraFacing,
+  }
 }

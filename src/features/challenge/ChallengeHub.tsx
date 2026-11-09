@@ -82,7 +82,7 @@ export function ChallengeSubmission({ result, protocolVersion }: { result: Submi
     setLoading(true)
     setMessage(null)
     try {
-      const submitted = await submitChallengeResult(selectedId, alias.trim(), result)
+      const submitted = await submitChallengeResult(selectedId, alias.trim(), result, protocolVersion)
       setMessage(`${submitted.notice} Итоговый балл: ${submitted.score}.`)
     } catch (reason: unknown) {
       const text = reason instanceof Error ? reason.message : ''
